@@ -1,0 +1,24 @@
+# --- Web Framework & Server ---
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.9
+
+# --- Database & State (UPDATED: Pinned pymongo to fix ImportError) ---
+motor==3.3.2            
+pymongo==4.6.3          # Fixed version to prevent motor breakage
+redis==5.0.1            
+dnspython==2.6.1       
+
+# --- Telegram Core ---
+pyrogram==2.0.106       
+tgcrypto==1.2.5 
+
+# --- Security & Auth ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# --- Infrastructure ---
+python-dotenv==1.0.1
+pydantic-settings==2.1.0 
+aiohttp==3.9.3          
+docker==7.0.0

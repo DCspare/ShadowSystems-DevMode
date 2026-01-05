@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'shadow_services'
+    static_configs:
+      - targets: ['manager:8000', 'gateway:80']

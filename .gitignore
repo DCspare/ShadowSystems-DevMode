@@ -1,0 +1,47 @@
+# --- 🔒 SECRETS & KEYS ---
+.env
+.env.*.local
+*.session
+*.session-journal
+*.token
+
+# --- 🐳 DATA VOLUMES (LOCAL PERSISTENCE) ---
+# We keep the structure but ignore the actual heavy data
+data/mongo/*
+data/redis/*
+data/cache/*
+data/sessions/*
+!data/**/.keep
+
+# --- 🐍 PYTHON ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+
+# --- 🕸️ NEXT.JS ---
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+
+# --- 🐹 GOLANG ---
+apps/stream-engine/stream-engine
+*.exe
+
+# --- 💻 IDE SETTINGS ---
+.vscode/
+.idx/
+.idea/
+*.swp
+
+# --- 🍪 SECURITY ---
+cookies.txt
+*cookie*.txt
