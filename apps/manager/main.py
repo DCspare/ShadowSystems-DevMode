@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from services.database import db_service
-from services.bot_manager import bot_manager # New import
+from services.bot_manager import bot_manager
+from routers import library  # Added this
 import logging
 
 # Setup Logging
@@ -25,22 +26,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- ROUTES ---
+app.include_router(library.router)  # Wired the Library Router
+
 @app.on_event("startup")
 async def startup_event():
-    """Ignition Sequence: Database then Bot"""
+    """Ignition Sequence"""
     logger.info(f"Initializing Shadow Brain in {settings.MODE} mode...")
     
-    # 1. Initialize Database
+    # Initialize Database
     try:
         await db_service.connect()
     except Exception as e:
-        logger.error(f"DATABASE CRITICAL: Bot will start in Offline Mode. Error: {e}")
+        logger.error(f"DATABASE CRITICAL: {e}")
 
-    # 2. Initialize Manager Bot (Bot Identity)
+    # Initialize Manager Bot
     try:
         await bot_manager.start()
     except Exception as e:
-        logger.error(f"TELEGRAM CRITICAL: Failed to start Bot Service: {e}")
+        logger.error(f"TELEGRAM CRITICAL: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
