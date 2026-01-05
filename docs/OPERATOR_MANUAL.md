@@ -130,4 +130,8 @@ git tag -a v0.3-core-api -m "Library logic and Bot handshake stable"
 
 # Example 2: Send tags to remote repo for deployment visibility
 git push --tags
+
+# --- For code push repo authentication ---
+# Format: https://{YOUR_USERNAME}:{YOUR_TOKEN}@github.com/{USERNAME}/{REPO_NAME}.git
+git remote set-url origin https://YourUsername:ghp_yourTokenHERE@github.com/DCspare/ShadowSystems-DevMode.git
 ```
