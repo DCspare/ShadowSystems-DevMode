@@ -67,3 +67,15 @@ async def index_content(media_type: str, tmdb_id: int):
     except Exception as e:
         logger.error(f"Indexing error for TMDB {tmdb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/attach_file/{tmdb_id}")
+async def attach_media_manually(tmdb_id: int, file_path: str):
+    """
+    Shadow Logic: Triggers the Worker to process a local file 
+    and link it to a movie. (Bridge Step for Phase 3).
+    """
+    # For now, we use a simple Redis message to signal the Worker
+    # Payload: tmdb_id|file_path
+    payload = f"{tmdb_id}|{file_path}"
+    await db_service.redis.lpush("queue:leech", payload)
+    return {"status": "task_queued", "tmdb_id": tmdb_id, "file": file_path}
