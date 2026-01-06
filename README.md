@@ -113,7 +113,11 @@ docker compose -f docker-compose.dev.yml down
 - [x] Telegram ↔ Cloud Sync (First movie file linked via Redis Task)
 - [x] Proxy Secret Injection (EnvSubst Security)
 - [x] IP-Lock Verification (MD5 Shadow Protocol)
-- [ ] **NEXT:** Remote Stream Handover (Phase 3-C: Building the Go Engine)
+- [x] Worker-Video / Redis task queue integration.
+- [x] Security: Proxy-aware signed streaming URLs.
+- [x] Gateway: Handover routing logic (API vs Stream).
+- [x] Go-Stream-Engine: Ignition & Concurrency handling skeleton.
+- [ ] **NEXT TARGET:** Go-MTProto Influx (Building the Telegram Bridge in the Go Engine).
 - [ ] Remote Link Ingestion (Integrating yt-dlp/Aria2 into Leech handler)
 - [ ] Nginx Secure Link & Slice Caching Validation
 - [ ] Frontend Obsidian Glass Shell (Next.js)
