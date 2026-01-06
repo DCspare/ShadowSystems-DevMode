@@ -111,7 +111,10 @@ docker compose -f docker-compose.dev.yml down
 - [x] Peer Registration Protocol (/register command for groups)
 - [x] Media Sanitization Engine (Identity Scrubbing logic)
 - [x] Telegram ↔ Cloud Sync (First movie file linked via Redis Task)
-- [ ] **CURRENT:** Remote Link Ingestion (Integrating yt-dlp/Aria2 into Leech handler)
+- [x] Proxy Secret Injection (EnvSubst Security)
+- [x] IP-Lock Verification (MD5 Shadow Protocol)
+- [ ] **NEXT:** Remote Stream Handover (Phase 3-C: Building the Go Engine)
+- [ ] Remote Link Ingestion (Integrating yt-dlp/Aria2 into Leech handler)
 - [ ] Nginx Secure Link & Slice Caching Validation
 - [ ] Frontend Obsidian Glass Shell (Next.js)
 
@@ -228,6 +231,16 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
   ```bash
   docker run --rm -v "$(pwd):/work" alpine sh -c "chmod -R 777 /work/data /work/apps"
   ```
+
+#### 🧱 Hurdle #15: The Nginx Environment Variable Silent Failure
+- **The Error:** Nginx returning 403 Forbidden even with correct URL format.
+- **Description:** Nginx's native configuration cannot read the `.env` file directly. When we moved from hardcoding to variables, Nginx saw an empty string for the secret.
+- **The Fix:** Migrated to the `nginx:alpine` **Template pattern**. Docker-compose now injects the `${SECURE_LINK_SECRET}` into a `.template` file which Nginx converts into a final configuration at runtime.
+
+#### 🧱 Hurdle #16: Nested Proxy IP Blindness
+- **The Error:** `{"status": "denied", "ip_seen": "172.20.0.1"}`.
+- **Description:** Manager signed links using the internal Docker container IP of the Nginx gateway, while Nginx was verifying links using the Bridge IP of the host.
+- **The Fix:** Configured "Proxy Trust" in the Python Brain. The router now prioritizes the `X-Real-IP` header, ensuring both the Brain and the Bouncer agree on the requester's identity.
 
 ---------
 *Last Updated: 2026-01-05*

@@ -44,7 +44,7 @@ class VideoWorker:
         logger.info("Task Watcher started. Listening to 'queue:leech'...")
         while True:
             try:
-                task = await self.redis.brpop("queue:leech", timeout=10)
+                task = await self.redis.brpop("queue:leech", timeout=30)
                 if task:
                     # task = ['queue:leech', '27205|/app/test_video.mp4']
                     tmdb_id, file_path = task[1].split("|")

@@ -1,14 +1,14 @@
 FROM nginx:alpine
 
-# Remove default config
-RUN rm /etc/nginx/conf.d/default.conf
+# The environment variable injection path
+ENV NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/templates
+ENV NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
+ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
 
-# We will mount our nginx.conf via docker-compose volume in dev, 
-# but this copies a fallback during build
-COPY nginx.conf /etc/nginx/nginx.conf
+# Ensure templates folder exists
+RUN mkdir -p /etc/nginx/templates
 
-# Prepare cache folder
-RUN mkdir -p /var/cache/nginx/streamvault && \
-    chown -R nginx:nginx /var/cache/nginx/streamvault
+# Copy our template (NOT the final config)
+COPY nginx.conf.template /etc/nginx/templates/nginx.conf.template
 
 EXPOSE 80

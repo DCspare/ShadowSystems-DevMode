@@ -1,8 +1,10 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from services.metadata import metadata_service
 from services.database import db_service
 from core.utils import generate_short_id
-import logging
+from core.security import sign_stream_link 
+from fastapi import Request
 
 logger = logging.getLogger("Library")
 router = APIRouter(prefix="/library", tags=["Library"])
@@ -18,13 +20,37 @@ async def search_online(q: str, type: str = "movie"):
         return {"results": [], "error": str(e)}
 
 @router.get("/list")
-async def list_indexed():
-    """Return all items stored in our MongoDB Library"""
+async def list_library():
     cursor = db_service.db.library.find({})
     items = await cursor.to_list(length=100)
     for i in items:
         i["_id"] = str(i["_id"])
     return {"library": items}
+
+@router.get("/view/{short_id}")
+async def get_by_slug(short_id: str, request: Request):
+    """
+    Shadow Logic: Returns metadata with signed 'VIP' links.
+    """
+    item = await db_service.db.library.find_one({"short_id": short_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Title not found")
+    
+    # 🔍 SHADOW FIX: Use the IP sent by the Gateway proxy
+    client_ip = request.headers.get("x-real-ip", request.client.host)
+    
+    logger.info(f"Generating links for ShortID: {short_id} (Client IP: {client_ip})") 
+    
+    # Process files to add signatures
+    if "files" in item:
+        for file in item["files"]:
+            # Generate the token based on TG ID and Client IP
+            signature_query = sign_stream_link(file["telegram_id"], client_ip)
+            # The URL will look like: /api/stream/TELEGRAM_ID?token=HASH&expires=TIMESTAMP
+            file["stream_url"] = f"/stream/{file['telegram_id']}?{signature_query}"
+    
+    item["_id"] = str(item["_id"])
+    return item
 
 @router.post("/index/{media_type}/{tmdb_id}")
 async def index_content(media_type: str, tmdb_id: int):
