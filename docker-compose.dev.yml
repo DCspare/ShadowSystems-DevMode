@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # --- 1. THE GATEWAY (Nginx Proxy) ---
+  # --- 1. THE GATEWAY (Handover Logic) ---
   gateway:
     build: ./apps/gateway
     container_name: sv-gateway-dev
@@ -12,14 +12,25 @@ services:
     environment:
       - SECURE_LINK_SECRET=${SECURE_LINK_SECRET} # Pulls from your .env
     volumes:
-      # Remove the nginx.conf volume mount if it existed, Docker will generate it from template
       - ./data/cache:/var/cache/nginx/streamvault
     depends_on:
       - manager
+      - stream-engine # Gateway now relies on the Engine
     networks:
       - sv-internal
 
-  # --- 2. THE BRAIN (Manager API) ---
+  # --- 2. THE ENGINE (The Muscle) ---
+  stream-engine:
+    build: ./apps/stream-engine
+    container_name: sv-stream-engine-dev
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"
+    networks:
+      - sv-internal
+
+  # --- 3. THE BRAIN (Manager API) ---
   manager:
     build: ./apps/manager
     container_name: sv-manager-dev
@@ -33,7 +44,7 @@ services:
     networks:
       - sv-internal
 
-  # --- 3. VIDEO WORKER (StreamVault Ingestion) ---
+  # --- 4. VIDEO WORKER (StreamVault Ingestion) ---
   worker-video:
     build: ./apps/worker-video
     container_name: sv-worker-video-dev
@@ -49,7 +60,7 @@ services:
     networks:
       - sv-internal
 
-  # --- 4. MANGA WORKER (ReadVault Librarian) ---
+  # --- 5. MANGA WORKER (ReadVault Librarian) ---
   worker-manga:
     image: python:3.10-slim # Placeholder until we write code
     container_name: sv-worker-manga-dev
@@ -57,7 +68,7 @@ services:
     networks:
       - sv-internal
 
-  # --- 5. THE FACE (Frontend Placeholder) ---
+  # --- 6. THE FACE (Frontend Placeholder) ---
   web:
     image: node:20-alpine
     container_name: sv-web-dev

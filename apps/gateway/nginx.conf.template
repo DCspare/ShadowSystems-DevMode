@@ -6,45 +6,50 @@ http {
     include       mime.types;
     default_type  application/json;
 
+    # Definitions for upstream servers
     upstream manager_api { server manager:8000; }
+    upstream go_engine   { server stream-engine:8000; }
 
     server {
         listen 80;
-        
-        # Consistent access logs
         access_log /dev/stdout;
         error_log /dev/stderr;
 
         set $secure_link_secret "${SECURE_LINK_SECRET}"; 
 
+        # --- 🛡️ THE SECURITY HANDOVER ---
         location /stream/ {
             secure_link $arg_token,$arg_expires;
-            
-            # The exact sequence must match Python: Expiry + Path + IP + " " + Secret
             secure_link_md5 "$secure_link_expires$uri$remote_addr $secure_link_secret";
 
-            if ($secure_link = "") { 
-                # This response returns the exact string Nginx used so we can compare
-                add_header X-Debug-IP "$remote_addr";
-                return 403 '{"status": "denied", "ip_seen": "$remote_addr", "hint": "Ensure Python saw this same IP"}'; 
-            }
-            
-            if ($secure_link = "0") { return 410 '{"status": "expired"}'; }
+            # Verification Rejections
+            if ($secure_link = "") { return 403 '{"status": "denied", "error": "BAD_SIG"}'; }
+            if ($secure_link = "0") { return 410 '{"status": "expired", "error": "TOKEN_OLD"}'; }
 
-            return 200 '{"status": "authorized", "target": "$uri"}';
+            # Success Handover: Strip the Nginx security headers before passing to Go
+            # Note: We proxy directly to the internal Go engine port
+            proxy_pass http://go_engine;
+            
+            # Transfer critical headers so Go knows the Real IP
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-File-ID $uri;
+            
+            # Enable Streaming Optimization
+            proxy_buffering off;
+            proxy_http_version 1.1;
         }
 
+        # --- 📡 API GATEWAY ---
         location /api/ {
             rewrite ^/api/(.*)$ /$1 break;
             proxy_pass http://manager_api;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
+        # Default proxy to Python Brain
         location / {
             proxy_pass http://manager_api;
-            proxy_set_header Host $host;
         }
     }
 }
