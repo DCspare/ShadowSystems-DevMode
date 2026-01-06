@@ -242,5 +242,15 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 - **Description:** Manager signed links using the internal Docker container IP of the Nginx gateway, while Nginx was verifying links using the Bridge IP of the host.
 - **The Fix:** Configured "Proxy Trust" in the Python Brain. The router now prioritizes the `X-Real-IP` header, ensuring both the Brain and the Bouncer agree on the requester's identity.
 
+#### 🧱 Hurdle #17: Docker Compose "Mapping Error"
+- **The Error:** `services.services must be a mapping`.
+- **Description:** A syntax duplication occurred where the key `services:` was accidentally nested twice during a configuration update.
+- **The Fix:** Hard-reset of the `docker-compose.dev.yml` structure, ensuring the flat-hierarchy of Monorepo services.
+
+#### 🧱 Hurdle #18: The Go Binary Cold-Start
+- **The Error:** Delayed response on the first stream request in IDX.
+- **Description:** The Go Dockerfile utilizes a multi-stage build. During the first `up`, Go downloads dependencies and compiles. 
+- **The Fix:** Implemented a non-blocking `health` probe and standard Docker `depends_on` logic to ensure the Brain waits for the Muscle to be fully compiled before accepting traffic.
+
 ---------
 *Last Updated: 2026-01-05*
