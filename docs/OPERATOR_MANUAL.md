@@ -9,7 +9,6 @@
 # --- START & BUILD ---
 
 # Use On of these To stop Containers
-docker compose -f docker-compose.dev.yml down # For all at once
 docker stop $(docker ps -a -q) # for all at once
 docker stop {ContainerID} # For one by one
 
