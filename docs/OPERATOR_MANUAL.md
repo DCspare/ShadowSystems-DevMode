@@ -16,7 +16,6 @@ docker stop {ContainerID} # For one by one
 # Use this to launch all services or update them after a code change
 docker compose -f docker-compose.dev.yml up -d --build
 
-
 # --- STOP & CLEAN ---
 # Stop all containers but keep data (removes the virtual network)
 docker compose -f docker-compose.dev.yml down
@@ -62,6 +61,9 @@ docker ps
 ```bash
 # --- PERMISSION HARDENING ---
 # Example 1: Ensure session files are writable by the bot service
+# Force the session folder to be writable and owned by your current IDX user
+chown -R 1000:1000 data/sessions/
+
 chmod -R 777 data/sessions
 
 # Example 2: Fix workspace ownership after creating new files
