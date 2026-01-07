@@ -58,6 +58,12 @@ SHADOW-SYSTEMS (Root)
 - **[THE GREAT BRIDGE]**: Successfully closed the full-stack loop. The Manager can now signal the Worker via Redis, resulting in an automated file transfer to Telegram and an instantaneous metadata link in MongoDB Atlas.
 - **[CONTEXT PIERCE]**: Overcame the "Group Context Blindness" hurdle, allowing workers to dynamically resolve and cache Supergroup IDs on-the-fly
 
+## 🏆 Achievements (v0.1.0-alpha)
+- [x] **Microservice Pulse:** Successfully connected `Manager` (Brain) to `Worker` (Muscle) via Redis Queue.
+- [x] **Safe Mode:** Configured Worker to run as a Bot (`WORKER_MODE=BOT`) to protect personal SIMs during logic testing.
+- [x] **Aria2 Daemon:** Implemented background process management inside Python to handle heavy downloads alongside the logic loop.
+- [x] **Verification:** Leeched 1st test file from Google servers to Telegram successfully.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -266,5 +272,21 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 - **Description:** Cloud IDE networks (Google IDX) often have fluctuating latency during the initial handshake with Telegram’s global data centers (DC2 to DC5).
 - **The Fix:** Implemented a **"Stabilizer Delay"** in the Go routine, allowing the MTProto network task to fully bridge before attempting the `Auth().Bot()` sequence.
 
+#### 🧱 Hurdle #21: The "Peer ID Invalid" Loop
+*   **Problem:** New Telegram sessions cannot "Find" a channel ID just by the integer (e.g., `-100xx`). They need the Access Hash, which is only cached after an interaction.
+*   **Fix:**
+    *   **Attempt 1:** `get_dialogs` sweep (Failed - Bots can't call this).
+        *   **Solution:** Added manual `/health` command. Admin sends this in the log channel once per restart. The bot receives the message update -> Pyrogram caches the Peer hash -> Uploads work.
+
+        ### 2. Dependency Confusion (`apt` vs `pip`)
+        *   **Problem:** Docker build failed because we tried to install `yt-dlp` via `apt-get` (Linux), but it is a Python package.
+        *   **Fix:** Removed `yt-dlp` from Dockerfile system installs and pinned it strictly in `requirements.txt`.
+
+        ### 3. Docker Caching Conflicts
+        *   **Problem:** After adding `aria2` to Dockerfile, the container still crashed with "Command not found".
+        *   **Cause:** Docker reused an old cached layer that didn't have the binary.
+        *   **Fix:** Forced rebuild: `docker compose build --no-cache worker-video`.
+
 ---------
+
 *Last Updated: 2026-01-05*
