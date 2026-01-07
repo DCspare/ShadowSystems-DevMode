@@ -55,3 +55,8 @@ async def shutdown_event():
 @app.get("/health")
 async def health_check():
     return {"status": "online", "db": "connected" if db_service.db is not None else "failed"}
+
+# Redirect root for browser diagnostics
+@app.get("/")
+async def root():
+    return {"message": "Shadow Manager API Level 2026 active"}

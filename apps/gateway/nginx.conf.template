@@ -6,48 +6,48 @@ http {
     include       mime.types;
     default_type  application/json;
 
-    # Definitions for upstream servers
     upstream manager_api { server manager:8000; }
-    upstream go_engine   { server stream-engine:8000; }
+    upstream go_muscle  { server stream-engine:8000; }
 
     server {
         listen 80;
-        access_log /dev/stdout;
-        error_log /dev/stderr;
-
+        
+        # Identity passing headers
         set $secure_link_secret "${SECURE_LINK_SECRET}"; 
 
-        # --- 🛡️ THE SECURITY HANDOVER ---
-        location /stream/ {
+        location ~ ^/stream/(?<fid>[^?]+) {
             secure_link $arg_token,$arg_expires;
             secure_link_md5 "$secure_link_expires$uri$remote_addr $secure_link_secret";
 
-            # Verification Rejections
-            if ($secure_link = "") { return 403 '{"status": "denied", "error": "BAD_SIG"}'; }
-            if ($secure_link = "0") { return 410 '{"status": "expired", "error": "TOKEN_OLD"}'; }
+            if ($secure_link = "") { return 403; }
+            
+            # Use specific name to match the Manager Resolver
+            auth_request /_internal/coords/$fid;
+            
+            auth_request_set $media_id $upstream_http_x_media_id;
+            auth_request_set $access_hash $upstream_http_x_access_hash;
+            auth_request_set $file_ref $upstream_http_x_file_ref;
 
-            # Success Handover: Strip the Nginx security headers before passing to Go
-            # Note: We proxy directly to the internal Go engine port
-            proxy_pass http://go_engine;
-            
-            # Transfer critical headers so Go knows the Real IP
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-File-ID $uri;
-            
-            # Enable Streaming Optimization
+            proxy_pass http://go_muscle;
+            proxy_set_header X-Media-ID $media_id;
+            proxy_set_header X-Access-Hash $access_hash;
+            proxy_set_header X-File-Ref $file_ref;
             proxy_buffering off;
-            proxy_http_version 1.1;
         }
 
-        # --- 📡 API GATEWAY ---
+        # Bridging strictly to the internal Manager Resolver
+        location ~ ^/_internal/coords/(.*)$ {
+            internal;
+            proxy_pass http://manager_api/library/internal/stream_meta/$1;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+        }
+
         location /api/ {
             rewrite ^/api/(.*)$ /$1 break;
             proxy_pass http://manager_api;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
         }
 
-        # Default proxy to Python Brain
         location / {
             proxy_pass http://manager_api;
         }

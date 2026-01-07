@@ -1,12 +1,17 @@
 import logging
-from fastapi import APIRouter, HTTPException
+import base64
+import os
+from fastapi import APIRouter, HTTPException , Request
+from fastapi.responses import JSONResponse
 from services.metadata import metadata_service
 from services.database import db_service
+from services.bot_manager import bot_manager
 from core.utils import generate_short_id
 from core.security import sign_stream_link 
-from fastapi import Request
+from pyrogram.file_id import FileId # Used to decode the string identity
 
 logger = logging.getLogger("Library")
+# Router handles the /library prefix internally
 router = APIRouter(prefix="/library", tags=["Library"])
 
 @router.get("/search")
@@ -21,36 +26,39 @@ async def search_online(q: str, type: str = "movie"):
 
 @router.get("/list")
 async def list_library():
+    """Retrieves full library manifest."""
     cursor = db_service.db.library.find({})
     items = await cursor.to_list(length=100)
-    for i in items:
-        i["_id"] = str(i["_id"])
+    for i in items: i["_id"] = str(i["_id"])
     return {"library": items}
 
 @router.get("/view/{short_id}")
 async def get_by_slug(short_id: str, request: Request):
-    """
-    Shadow Logic: Returns metadata with signed 'VIP' links.
-    """
+    """Client facing metadata endpoint with Secure Link generation."""
     item = await db_service.db.library.find_one({"short_id": short_id})
-    if not item:
-        raise HTTPException(status_code=404, detail="Title not found")
-    
-    # 🔍 SHADOW FIX: Use the IP sent by the Gateway proxy
+    if not item: raise HTTPException(status_code=404)
     client_ip = request.headers.get("x-real-ip", request.client.host)
-    
-    logger.info(f"Generating links for ShortID: {short_id} (Client IP: {client_ip})") 
-    
-    # Process files to add signatures
     if "files" in item:
         for file in item["files"]:
-            # Generate the token based on TG ID and Client IP
-            signature_query = sign_stream_link(file["telegram_id"], client_ip)
-            # The URL will look like: /api/stream/TELEGRAM_ID?token=HASH&expires=TIMESTAMP
-            file["stream_url"] = f"/stream/{file['telegram_id']}?{signature_query}"
-    
+            sig = sign_stream_link(file["telegram_id"], client_ip)
+            file["stream_url"] = f"/stream/{file['telegram_id']}?{sig}"
     item["_id"] = str(item["_id"])
     return item
+
+@router.get("/internal/stream_meta/{telegram_id:path}")
+async def internal_resolver(telegram_id: str):
+    """Sub-request resolver used strictly by Nginx Gateway."""
+    try:
+        clean_id = telegram_id.split('?')[0]
+        fid = FileId.decode(clean_id)
+        headers = {
+            "X-Media-ID": str(fid.media_id),
+            "X-Access-Hash": str(fid.access_hash),
+            "X-File-Ref": fid.file_reference.hex()
+        }
+        return JSONResponse(content={"status": "ok"}, headers=headers)
+    except Exception:
+        raise HTTPException(status_code=400)
 
 @router.post("/index/{media_type}/{tmdb_id}")
 async def index_content(media_type: str, tmdb_id: int):
@@ -105,3 +113,4 @@ async def attach_media_manually(tmdb_id: int, file_path: str):
     payload = f"{tmdb_id}|{file_path}"
     await db_service.redis.lpush("queue:leech", payload)
     return {"status": "task_queued", "tmdb_id": tmdb_id, "file": file_path}
+

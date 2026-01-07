@@ -256,5 +256,15 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 - **Description:** The Go Dockerfile utilizes a multi-stage build. During the first `up`, Go downloads dependencies and compiles. 
 - **The Fix:** Implemented a non-blocking `health` probe and standard Docker `depends_on` logic to ensure the Brain waits for the Muscle to be fully compiled before accepting traffic.
 
+#### 🧱 Hurdle #19: Docker EOF "Backslash" Injection
+- **The Error:** `strconv.Atoi: parsing "\\11603806": invalid syntax`.
+- **Description:** Using a standard `cat << EOF` in the terminal caused the shell to attempt variable expansion or escape processing, resulting in literal backslashes being written into the `docker-compose` file.
+- **The Fix:** Migrated to the **Quoted EOF pattern (`cat << 'EOF'`)**, which forces the terminal to treat all characters as raw text, ensuring the Docker engine receives clean environment variables.
+
+#### 🧱 Hurdle #20: MTProto Connection Instability (DC Cycle)
+- **The Error:** Intermittent `DC_ID_INVALID` or socket drops during initialization.
+- **Description:** Cloud IDE networks (Google IDX) often have fluctuating latency during the initial handshake with Telegram’s global data centers (DC2 to DC5).
+- **The Fix:** Implemented a **"Stabilizer Delay"** in the Go routine, allowing the MTProto network task to fully bridge before attempting the `Auth().Bot()` sequence.
+
 ---------
 *Last Updated: 2026-01-05*

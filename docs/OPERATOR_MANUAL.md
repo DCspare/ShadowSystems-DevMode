@@ -25,6 +25,8 @@ docker compose -f docker-compose.dev.yml restart manager
 
 # Example 2: Update specifically the gateway after changing nginx.conf
 docker compose -f docker-compose.dev.yml up -d --build gateway
+
+docker compose -f docker-compose.dev.yml build --no-cache worker-video
 ```
 
 ---
@@ -76,6 +78,9 @@ docker exec -it sv-manager-dev bash
 docker exec sv-manager-dev ls -R /app/sessions
 
 # --- DISK PURGE (Potato Defense) ---
+# To check Total RAM + Swap (--mega, --kilo, --giga)
+free -t --giga 
+
 # Removes old Docker image layers to prevent "No Space Left on Device"
 docker system prune -f
 

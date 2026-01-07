@@ -17,35 +17,37 @@ class ShadowBot:
         """Initializes and starts the Pyrogram Client"""
         logger.info("Starting Manager Bot...")
         
-        # Absolute path within the container mount
         session_dir = "/app/sessions"
-        
-        # Ensure directory exists and is writable
         if not os.path.exists(session_dir):
             os.makedirs(session_dir, exist_ok=True)
 
-        # Initialize Client
-        # Identity Logic: Always use Bot Token for the Manager Brain
+        # Smart Plugin Loader
+        # Tells Pyrogram to look in "handlers" folder for decorators
+        plugins_config = dict(
+            root="handlers" 
+        )
+
         self.app = Client(
             name="manager_admin",
             api_id=settings.TG_API_ID,
             api_hash=settings.TG_API_HASH,
             bot_token=settings.TG_BOT_TOKEN,
-            workdir=session_dir
+            workdir=session_dir,
+            plugins=plugins_config # <--- Auto-loads leech.py
         )
         
         await self.app.start()
         me = await self.app.get_me()
-        logger.info(f"Manager Bot active as @{me.username}")
+        logger.info(f"✅ Manager Brain Online: @{me.username}")
 
     async def stop(self):
-        """Safe shutdown of the client"""
+        """Safe shutdown"""
         if self.app:
             try:
                 await self.app.stop()
-                logger.info("Manager Bot disconnected.")
-            except Exception as e:
-                logger.error(f"Error stopping bot: {e}")
+            except:
+                pass
+            logger.info("Manager Bot disconnected.")
 
 # Critical instance name that main.py expects
 bot_manager = ShadowBot()

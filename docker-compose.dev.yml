@@ -24,7 +24,11 @@ services:
     build: ./apps/stream-engine
     container_name: sv-stream-engine-dev
     restart: unless-stopped
-    env_file: .env
+    env_file: .env 
+    environment:
+      - TG_API_ID=${TG_API_ID}
+      - TG_API_HASH=${TG_API_HASH}
+      - TG_ENGINE_BOT_TOKEN=${TG_ENGINE_BOT_TOKEN}
     expose:
       - "8000"
     networks:
