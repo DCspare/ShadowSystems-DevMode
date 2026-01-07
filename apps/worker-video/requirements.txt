@@ -15,4 +15,5 @@ aiofiles==23.2.1
 
 # --- Downloads ---
 yt-dlp>=2023.11.16     
+aria2p
 tenacity==8.2.3        

@@ -9,8 +9,8 @@ logger = logging.getLogger("Leecher")
 
 class MediaLeecher:
     """
-    Shadow Logic: Handles media processing and library sync.
-    Includes auto-peer resolution for Supergroups.
+    Shadow Logic: Handles media parsing, high-visibility upload tracking, 
+    and Atlas library linking.
     """
     def __init__(self, client, db):
         self.client = client
@@ -24,43 +24,41 @@ class MediaLeecher:
         quality = f" {info.get('quality')}" if info.get('quality') else ""
         return f"{self.branding} {title}{year}{quality}"
 
-    async def get_log_chat(self):
-        """Resolves and caches the peer ID before operation"""
-        try:
-            target = int(os.getenv("TG_LOG_CHANNEL_ID"))
-            # Pre-emptive resolution caches the ID in Pyrogram's memory
-            chat = await self.client.get_chat(target)
-            return chat.id
-        except Exception as e:
-            logger.warning(f"Initial peer resolve failed: {e}. Trying secondary method...")
-            return int(os.getenv("TG_LOG_CHANNEL_ID"))
+    async def progress_meter(self, current, total, filename):
+        """High-speed terminal progress tracker for Monorepo logs."""
+        percentage = (current / total) * 100
+        # Log every 10% interval to avoid IDE log lag
+        if int(percentage) % 10 == 0:
+            filled = int(percentage // 5)
+            bar = "█" * filled + "-" * (20 - filled)
+            logger.info(f"📊 Transferring {filename[:15]}... |{bar}| {percentage:.1f}%")
 
     async def upload_and_sync(self, file_path: str, tmdb_id: int):
         try:
-            # 1. Resolve peer with self-healing
-            log_channel = await self.get_log_chat()
-            
+            target_id = int(os.getenv("TG_LOG_CHANNEL_ID"))
             file_name = os.path.basename(file_path)
             clean_name = self.sanitize_title(file_name)
             
-            logger.info(f"Uploading {file_name} to Log Storage...")
-            
-            # 2. Telegram Transfer
-            # We send directly to the resolved chat ID
+            logger.info(f"🚀 Launching Byte-Handshake for: {clean_name}")
+
+            # 1. Telegram Ingestion
             sent_msg = await self.client.send_document(
-                chat_id=log_channel,
+                chat_id=target_id,
                 document=file_path,
                 file_name=f"{clean_name}{os.path.splitext(file_name)[1]}",
-                caption=f"🎥 **{clean_name}**\n\n⚡ Source Synchronized.",
-                force_document=True
+                caption=f"🎥 **{clean_name}**\n\n⚡ Verified MTProto Source.",
+                force_document=True,
+                progress=self.progress_meter,
+                progress_args=(file_name,)
             )
 
             file_id = sent_msg.document.file_id
             
-            # 3. Final Database Update
+            # 2. Atlas Indexing
             file_data = {
                 "quality": PTN.parse(file_name).get('quality', '720p'),
                 "telegram_id": file_id,
+                "size_bytes": os.path.getsize(file_path),
                 "added_at": int(time.time())
             }
 
@@ -69,9 +67,9 @@ class MediaLeecher:
                 {"$push": {"files": file_data}, "$set": {"status": "available"}}
             )
             
-            logger.info(f"✅ SUCCESSFULLY LINKED: {clean_name} to Movie {tmdb_id}")
+            logger.info(f"✅ PROTOCOL COMPLETE: {clean_name} successfully mapped to TMDB:{tmdb_id}")
             return True
             
         except Exception as e:
-            logger.error(f"TRANSFER FAILURE for TMDB {tmdb_id}: {e}")
+            logger.error(f"Ingestion Aborted: {e}")
             return False
