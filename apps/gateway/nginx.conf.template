@@ -7,47 +7,26 @@ http {
     default_type  application/json;
 
     upstream manager_api { server manager:8000; }
-    upstream go_muscle  { server stream-engine:8000; }
+    
+    # -----------------------------------
+    # STREAMING ENGINE TEMPORARILY DISABLED
+    # upstream go_engine { server stream-engine:8000; }
+    # -----------------------------------
 
     server {
         listen 80;
-        
-        # Identity passing headers
-        set $secure_link_secret "${SECURE_LINK_SECRET}"; 
+        access_log /dev/stdout;
+        error_log /dev/stderr;
 
-        location ~ ^/stream/(?<fid>[^?]+) {
-            secure_link $arg_token,$arg_expires;
-            secure_link_md5 "$secure_link_expires$uri$remote_addr $secure_link_secret";
-
-            if ($secure_link = "") { return 403; }
-            
-            # Use specific name to match the Manager Resolver
-            auth_request /_internal/coords/$fid;
-            
-            auth_request_set $media_id $upstream_http_x_media_id;
-            auth_request_set $access_hash $upstream_http_x_access_hash;
-            auth_request_set $file_ref $upstream_http_x_file_ref;
-
-            proxy_pass http://go_muscle;
-            proxy_set_header X-Media-ID $media_id;
-            proxy_set_header X-Access-Hash $access_hash;
-            proxy_set_header X-File-Ref $file_ref;
-            proxy_buffering off;
-        }
-
-        # Bridging strictly to the internal Manager Resolver
-        location ~ ^/_internal/coords/(.*)$ {
-            internal;
-            proxy_pass http://manager_api/library/internal/stream_meta/$1;
-            proxy_pass_request_body off;
-            proxy_set_header Content-Length "";
-        }
-
+        # --- 📡 API GATEWAY ---
         location /api/ {
             rewrite ^/api/(.*)$ /$1 break;
             proxy_pass http://manager_api;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
         }
 
+        # Default to Python Brain
         location / {
             proxy_pass http://manager_api;
         }

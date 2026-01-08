@@ -2,74 +2,111 @@ import os
 import time
 import logging
 import PTN
-from hachoir.metadata import extractMetadata
-from hachoir.parser import createParser
+import uuid
+from pyrogram.file_id import FileId
 
 logger = logging.getLogger("Leecher")
 
 class MediaLeecher:
-    """
-    Shadow Logic: Handles media parsing, high-visibility upload tracking, 
-    and Atlas library linking.
-    """
     def __init__(self, client, db):
         self.client = client
         self.db = db
         self.branding = os.getenv("FILE_BRANDING_TAG", "[ShadowSystem]")
 
     def sanitize_title(self, raw_name: str) -> str:
-        info = PTN.parse(raw_name)
-        title = info.get('title', 'Unknown')
-        year = f" ({info.get('year')})" if info.get('year') else ""
-        quality = f" {info.get('quality')}" if info.get('quality') else ""
-        return f"{self.branding} {title}{year}{quality}"
+        try:
+            info = PTN.parse(raw_name)
+            title = info.get('title', 'Unknown')
+            year = f" ({info.get('year')})" if info.get('year') else ""
+            quality = f" {info.get('quality')}" if info.get('quality') else ""
+            return f"{self.branding} {title}{year}{quality}"
+        except:
+            return f"{self.branding} {raw_name}"
 
-    async def progress_meter(self, current, total, filename):
-        """High-speed terminal progress tracker for Monorepo logs."""
-        percentage = (current / total) * 100
-        # Log every 10% interval to avoid IDE log lag
-        if int(percentage) % 10 == 0:
-            filled = int(percentage // 5)
-            bar = "█" * filled + "-" * (20 - filled)
-            logger.info(f"📊 Transferring {filename[:15]}... |{bar}| {percentage:.1f}%")
+    async def get_log_chat(self):
+        try:
+            return int(os.getenv("TG_LOG_CHANNEL_ID"))
+        except:
+            return 0
+
+    async def upload_progress(self, current, total):
+        # Progress Log throttling
+        if total > 0:
+            percentage = current * 100 / total
+            # Log only at 10% increments to save terminal spam
+            if int(percentage) % 10 == 0 and int(percentage) != getattr(self, '_last_log_pct', -1):
+                logger.info(f"📤 Uploading: {percentage:.1f}%")
+                self._last_log_pct = int(percentage)
 
     async def upload_and_sync(self, file_path: str, tmdb_id: int):
         try:
-            target_id = int(os.getenv("TG_LOG_CHANNEL_ID"))
+            log_channel = await self.get_log_chat()
             file_name = os.path.basename(file_path)
             clean_name = self.sanitize_title(file_name)
             
-            logger.info(f"🚀 Launching Byte-Handshake for: {clean_name}")
-
-            # 1. Telegram Ingestion
+            logger.info(f"🚀 Starting Upload: {file_name}")
+            self._last_log_pct = -1
+            
+            # 1. Telegram Upload
             sent_msg = await self.client.send_document(
-                chat_id=target_id,
+                chat_id=log_channel,
                 document=file_path,
                 file_name=f"{clean_name}{os.path.splitext(file_name)[1]}",
-                caption=f"🎥 **{clean_name}**\n\n⚡ Verified MTProto Source.",
+                caption=f"🎥 **{clean_name}**",
                 force_document=True,
-                progress=self.progress_meter,
-                progress_args=(file_name,)
+                progress=self.upload_progress
             )
 
-            file_id = sent_msg.document.file_id
+            # 2. Extract Data
+            doc = sent_msg.document
+            decoded = FileId.decode(doc.file_id)
             
-            # 2. Atlas Indexing
             file_data = {
                 "quality": PTN.parse(file_name).get('quality', '720p'),
-                "telegram_id": file_id,
-                "size_bytes": os.path.getsize(file_path),
-                "added_at": int(time.time())
+                "telegram_id": doc.file_id,
+                "file_size": doc.file_size,
+                "mime_type": doc.mime_type,
+                "added_at": int(time.time()),
+                "tg_raw": {
+                    "media_id": decoded.media_id,
+                    "access_hash": decoded.access_hash,
+                    "file_reference": decoded.file_reference.hex()
+                }
             }
 
-            await self.db.library.update_one(
-                {"tmdb_id": int(tmdb_id)},
-                {"$push": {"files": file_data}, "$set": {"status": "available"}}
-            )
-            
-            logger.info(f"✅ PROTOCOL COMPLETE: {clean_name} successfully mapped to TMDB:{tmdb_id}")
-            return True
+            # 3. Safe Database Upsert
+            try:
+                # PATH A: Document Exists -> Update (using Protected Operators)
+                existing = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
+                
+                if existing:
+                    await self.db.library.update_one(
+                        {"_id": existing["_id"]},
+                        {"$push": {"files": file_data}, "$set": {"status": "available"}}
+                    )
+                    logger.info(f"✅ DB UPDATED: Added to library {tmdb_id}")
+                
+                # PATH B: New Skeleton Document
+                else:
+                    new_doc = {
+                        "tmdb_id": int(tmdb_id),
+                        "title": f"Processing Upload {tmdb_id}",
+                        "clean_title": f"upload {tmdb_id}",
+                        "short_id": str(uuid.uuid4())[:7],
+                        "media_type": "movie",
+                        "status": "available",
+                        "visuals": { "poster": None },
+                        "files": [file_data]
+                    }
+                    await self.db.library.insert_one(new_doc)
+                    logger.info(f"✅ DB INSERTED: New skeleton for {tmdb_id}")
+
+                return True
+
+            except Exception as e:
+                logger.error(f"❌ DB Critical Error: {e}")
+                return False
             
         except Exception as e:
-            logger.error(f"Ingestion Aborted: {e}")
+            logger.error(f"❌ Upload Protocol Failed: {e}")
             return False

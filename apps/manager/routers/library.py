@@ -1,3 +1,5 @@
+# apps/manager/routers/library.py 
+
 import logging
 import base64
 import os
@@ -113,4 +115,3 @@ async def attach_media_manually(tmdb_id: int, file_path: str):
     payload = f"{tmdb_id}|{file_path}"
     await db_service.redis.lpush("queue:leech", payload)
     return {"status": "task_queued", "tmdb_id": tmdb_id, "file": file_path}
-

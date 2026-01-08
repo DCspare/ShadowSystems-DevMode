@@ -32,17 +32,47 @@ class VideoWorker:
         except:
             self.log_channel = 0
 
+    def clean_slate(self):
+        """🧹 WIPER: Removes all stale files from previous crashes"""
+        dl_dir = "/app/downloads"
+        logger.info(f"🧹 Cleaning slate at: {dl_dir}")
+        if os.path.exists(dl_dir):
+            try:
+                # Remove all files in the directory
+                for filename in os.listdir(dl_dir):
+                    file_path = os.path.join(dl_dir, filename)
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                logger.info("✅ Downloads folder purged.")
+            except Exception as e:
+                logger.warning(f"Failed to clean download folder: {e}")
+        else:
+            os.makedirs(dl_dir, exist_ok=True)
+
     def start_aria2_daemon(self):
         """Starts the aria2c binary."""
         logger.info("🚀 Launching Aria2 RPC Daemon...")
+        
+        # FIX: Force explicit path relative to root
+        dl_path = "/app/downloads"
+        if not os.path.exists(dl_path):
+            os.makedirs(dl_path, exist_ok=True)
+
         try:
             command = [
                 "aria2c",
                 "--enable-rpc",
                 "--rpc-listen-all=false", 
                 "--rpc-allow-origin-all",
-                "--dir=/app/downloads",
-                "--max-connection-per-server=16",
+                f"--dir={dl_path}",
+                
+                # CRITICAL FIXES FOR ERR 16 / ABORT
+                "--file-allocation=none",       # Stop pre-allocating disk space (Fixes Docker Error)
+                "--disk-cache=0",               # Disable RAM caching (Prevent buffer lag)
+                "--max-connection-per-server=4",# Keep connections low to avoid Google/Host blocks
+                "--min-split-size=10M",
                 "--quiet"
             ]
             self.aria2_proc = subprocess.Popen(command)
@@ -58,6 +88,9 @@ class VideoWorker:
             exit(1)
 
     async def init_services(self):
+        # 0. Safety Cleanup
+        self.clean_slate()
+        
         # 1. DB
         mongo_client = AsyncIOMotorClient(os.getenv("MONGO_URL"))
         self.db = mongo_client["shadow_systems"]
@@ -108,7 +141,9 @@ class VideoWorker:
               f"📡 **Connected Peer:** {chat_info}\n\n"
               f"✅ **System Ready.**"
              )
-            logger.info(f"Health Check command received from {message.chat.title}")
+             # FORCE CACHE UPDATE
+            # self.log_channel = message.chat.id
+            logger.info(f"Health Check successful. Session validated. Chat: {message.chat.title}")
 
         # 4. Start
         await self.app.start()
@@ -144,10 +179,13 @@ class VideoWorker:
                     logger.info(f"Consumed task: {payload}")
                     try:
                         tmdb_id, raw_url = payload.split("|")
-                        info = downloader.get_direct_url(raw_url)
-                        local_path = await downloader.start_download(info['url'])
+                        # CHANGED: We get a rich object now
+                        target_info = downloader.get_direct_url(raw_url)
+                        # CHANGED: We pass the whole object so it knows name/type
+                        local_path = await downloader.start_download(target_info)
                         
-                        if os.path.exists(local_path):
+                        # Validate and rename slightly if needed by Clean function...
+                        if local_path and os.path.exists(local_path):
                             await self.leecher.upload_and_sync(local_path, int(tmdb_id))
                             os.remove(local_path)
                             logger.info(f"🗑️ Cleaned up: {local_path}")

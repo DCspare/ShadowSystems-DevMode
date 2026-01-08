@@ -27,6 +27,7 @@ SHADOW-SYSTEMS (Root)
 │   ├── worker-manga/        # Specialized ReadVault Scrapers
 │   ├── worker-video/        # High-Speed Video Swarm
 │       ├── handlers/        # Logic Pipelines
+│       │   ├── downloader.py # Hybrid Aria2 + Native HTTP Engine
 │       │   └── leech.py     # Identity Sanitization & Transfer Core
 │       ├── Dockerfile       # Python 3.12 Media Image
 │       ├── requirements.txt # Version-pinned Media Libs
@@ -40,6 +41,24 @@ SHADOW-SYSTEMS (Root)
 
 ---
 
+## 📚 The Documentation Stack (Blueprints)
+*Refer to these files in `docs/v2_blueprint/` for the exact code logic.*
+
+| Domain | File Name | Description |
+| :--- | :--- | :--- |
+| **INFRASTRUCTURE** | [`context_01_infrastructure.md`] | Oracle Swarm, Nginx Cache rules, IPv6 config. |
+| **BOT LOGIC** | [`context_02_telegram_logic.md`] | Manager API, Worker Leeching, Mirror logic. |
+| **FRONTEND** | [`context_03_frontend_ux.md`] | Next.js Glass UI, Video Player, PWA. |
+| **DATABASE** | [`context_04_database.md`] | MongoDB Schemas (Movies, Tenants, Comments). |
+| **ROADMAP** | [`context_05_future_roadmap.md`] | Future features: ShadowParty, Stremio, OPDS. |
+| **ADMIN** | [`context_06_admin_panel.md`] | The Web Dashboard & Content CMS. |
+| **FRANCHISE** | [`context_07_franchise_model.md`] | **SaaS Model**: Pricing, Tenants, Multi-domain logic. |
+| **REVENUE** | [`context_08_monetization_ads.md`] | Adsterra, VAST, GPlinks, PPD integration. |
+| **SURVIVAL** | [`context_09_growth_survival.md`] | **Defense**: Satellite Config, Bot Warmer, Matrix Log View. |
+| **READVAULT** | [`context_readvault.md`] | **Phase 1-Lite**: Manga architecture for HF Spaces. |
+
+---
+
 ## 🛠 Operational Status & Achievements
 
 ### 🚀 Phase 1: Infrastructure Baseline (COMPLETED)
@@ -49,30 +68,24 @@ SHADOW-SYSTEMS (Root)
 - **Worker-Video Swarm:** ONLINE ✅ (Auth DC5 Handshake Verified)
 
 ### 🧠 Phase 2: Core Brain (IN PROGRESS)
-- **Identity Logic:** @Shadow_systemsBot is fully authenticated via MTProto (DC5).
-- **Metadata Ingestion:** Live TMDB integration enabled.
-- **Search & Store:** Capable of searching movies and officially indexing them into the cloud database with unique short-slug IDs.
-- **Short Link Protection:** Implementation of Base62 unique slug generation for obfuscation.
+- **Ingestion Pipeline:** Redis-Queue (`queue:leech`) connects API to Worker seamlessly.
+- **Hybrid Downloader:** Smart fallback system. If `Aria2` fails on Cloud IPs (Error 16), system auto-switches to `yt-dlp` native sockets.
+- **Metadata Upsert:** "Skeleton" logic creates database entries even if TMDB fails, preventing file loss.
+- **Database Indexing:** Search engine optimized with `title` and `author` Text Indexes.
 
-### 🏆 Landmark Achievements
-- **[THE GREAT BRIDGE]**: Successfully closed the full-stack loop. The Manager can now signal the Worker via Redis, resulting in an automated file transfer to Telegram and an instantaneous metadata link in MongoDB Atlas.
-- **[CONTEXT PIERCE]**: Overcame the "Group Context Blindness" hurdle, allowing workers to dynamically resolve and cache Supergroup IDs on-the-fly
-
-## 🏆 Achievements (v0.1.0-alpha)
-- [x] **Microservice Pulse:** Successfully connected `Manager` (Brain) to `Worker` (Muscle) via Redis Queue.
-- [x] **Safe Mode:** Configured Worker to run as a Bot (`WORKER_MODE=BOT`) to protect personal SIMs during logic testing.
-- [x] **Aria2 Daemon:** Implemented background process management inside Python to handle heavy downloads alongside the logic loop.
-- [x] **Verification:** Leeched 1st test file from Google servers to Telegram successfully.
+### 🏆 Landmark Achievements (v0.1.0-alpha)
+- **[THE GREAT BRIDGE]**: Successfully closed the full-stack loop. Admin `/leech` command -> Redis Queue -> Worker Download -> Telegram Upload -> MongoDB Indexing.
+- **[CONTEXT PIERCE]**: Overcame the "Group Context Blindness" hurdle by implementing a manual `/health` ping that force-caches peer hashes.
+- **[RESILIENT LEECHING]**: Implemented `File System Wipe` on startup to fix Docker Permission lockups (Error 16).
 
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
 1. **The Gateway Wall:** All media requests MUST proxy through the Nginx Gateway; Raw Telegram URLs are never exposed.
 2. **Stateless Workers:** Heavy workers must purge temporary data instantly after the Telegram upload phase.
-3. **Multi-Tenancy:** Routes distinguish between different franchise domains based on incoming headers.
-4. **Safety Factor:** Swarm rotation limits any single Telegram session to 15 concurrent users to prevent API bans.
-5. **Transience First**: All heavy media processing MUST occur in the container's \`/tmp/\` directory to ensure global write permissions and zero-trace operation.
-6. **Task Delegation**: Standard operations (leeches) are triggered via Redis Queues to prevent session lock collisions in the SQLite identity database.
+3. **Safety Factor:** Swarm rotation limits any single Telegram session to 15 concurrent users to prevent API bans.
+4. **Transience First**: All heavy media processing MUST occur in the container's `/app/downloads/` directory (777 permissions) to ensure global write access.
+5. **Task Delegation**: Standard operations (leeches) are triggered via Redis Queues to prevent session lock collisions in the SQLite identity database.
 
 ---
 
@@ -88,45 +101,14 @@ docker compose -f docker-compose.dev.yml up -d --build
 # Watch the Brain (Manager Bot & DB Connection)
 docker logs -f sv-manager-dev
 
-# Check Nginx Edge Proxy logs
-docker logs -f sv-gateway-dev
+# Watch the Muscle (Worker Downloading Progress)
+docker logs -f sv-worker-video-dev
 ```
 
 ### Halting the Engine
 ```bash
 docker compose -f docker-compose.dev.yml down
 ```
-
----
-
-## 📈 Next Step: Stage 3 (Worker & File Linker)
-- **Objective:** Deploy `worker-video` to perform the first "Mirroring" test.
-- **Mechanism:** Take a Magnet link/Direct link -> Leech into Shadow Storage -> Link back to the Indexed Movie entry in the Database.
-- **Achievements Required:** High-speed decryption handshake and concurrent stream distribution.
-
----
-
-## ✅ Progress Tracker
-- [x] Monorepo Folder Skeleton
-- [x] Docker Daemon Stabilization
-- [x] MongoDB Atlas Bridge
-- [x] Manager Bot DC5 Identity Verified
-- [x] Library Indexing API (TMDB)
-- [x] Handshake Baseline (Worker 1 bot-authorized and idling).
-- [x] Worker Handshake (Verified DC5 Connectivity)
-- [x] Peer Registration Protocol (/register command for groups)
-- [x] Media Sanitization Engine (Identity Scrubbing logic)
-- [x] Telegram ↔ Cloud Sync (First movie file linked via Redis Task)
-- [x] Proxy Secret Injection (EnvSubst Security)
-- [x] IP-Lock Verification (MD5 Shadow Protocol)
-- [x] Worker-Video / Redis task queue integration.
-- [x] Security: Proxy-aware signed streaming URLs.
-- [x] Gateway: Handover routing logic (API vs Stream).
-- [x] Go-Stream-Engine: Ignition & Concurrency handling skeleton.
-- [ ] **NEXT TARGET:** Go-MTProto Influx (Building the Telegram Bridge in the Go Engine).
-- [ ] Remote Link Ingestion (Integrating yt-dlp/Aria2 into Leech handler)
-- [ ] Nginx Secure Link & Slice Caching Validation
-- [ ] Frontend Obsidian Glass Shell (Next.js)
 
 ---
 
@@ -275,18 +257,29 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 #### 🧱 Hurdle #21: The "Peer ID Invalid" Loop
 *   **Problem:** New Telegram sessions cannot "Find" a channel ID just by the integer (e.g., `-100xx`). They need the Access Hash, which is only cached after an interaction.
 *   **Fix:**
-    *   **Attempt 1:** `get_dialogs` sweep (Failed - Bots can't call this).
+    *   `get_dialogs` sweep (Failed - Bots can't call this).
         *   **Solution:** Added manual `/health` command. Admin sends this in the log channel once per restart. The bot receives the message update -> Pyrogram caches the Peer hash -> Uploads work.
 
-        ### 2. Dependency Confusion (`apt` vs `pip`)
-        *   **Problem:** Docker build failed because we tried to install `yt-dlp` via `apt-get` (Linux), but it is a Python package.
-        *   **Fix:** Removed `yt-dlp` from Dockerfile system installs and pinned it strictly in `requirements.txt`.
+#### 🧱 Hurdle #22: Dependency Confusion (`apt` vs `pip`)
+- **Problem:** Docker build failed because we tried to install `yt-dlp` via `apt-get` (Linux), but it is a Python package.
+- **Fix:** Removed `yt-dlp` from Dockerfile system installs and pinned it strictly in `requirements.txt`.
 
-        ### 3. Docker Caching Conflicts
+#### 🧱 Hurdle #23: Docker Caching Conflicts
         *   **Problem:** After adding `aria2` to Dockerfile, the container still crashed with "Command not found".
         *   **Cause:** Docker reused an old cached layer that didn't have the binary.
         *   **Fix:** Forced rebuild: `docker compose build --no-cache worker-video`.
 
+#### 🧱 Hurdle #24: Aria2 "Error 16" (Cloud Filesystem)
+*   **Problem:** `Download aborted` instantly on Cloud IDEs due to `fallocate` failures on virtual filesystems.
+*   **Fix:**
+    1.  Configured Aria2 with `--file-allocation=none`.
+    2.  Implemented **"Hybrid Downloader"**: Falls back to `yt-dlp` native sockets if Aria2 connection drops.
+    3.  Implemented **Entrypoint Script**: Runs `chmod 777` as root on container startup to fix volume mount permissions.
+
+#### 🧱 Hurdle #25: The Bash Variable "Blanking"
+*   **Problem:** Python logic was deleted when creating files via terminal because `$push` and `$set` were interpreted as bash variables (empty).
+*   **Fix:** Switched to **Quoted EOF** pattern (`cat <<'EOF'`) to treat the entire code block as a string literal.
+
 ---------
 
-*Last Updated: 2026-01-05*
+*Last Updated: 2026-01-08*

@@ -15,24 +15,23 @@ services:
       - ./data/cache:/var/cache/nginx/streamvault
     depends_on:
       - manager
-      - stream-engine # Gateway now relies on the Engine
     networks:
       - sv-internal
 
   # --- 2. THE ENGINE (The Muscle) ---
-  stream-engine:
-    build: ./apps/stream-engine
-    container_name: sv-stream-engine-dev
-    restart: unless-stopped
-    env_file: .env 
-    environment:
-      - TG_API_ID=${TG_API_ID}
-      - TG_API_HASH=${TG_API_HASH}
-      - TG_ENGINE_BOT_TOKEN=${TG_ENGINE_BOT_TOKEN}
-    expose:
-      - "8000"
-    networks:
-      - sv-internal
+  # stream-engine:
+  #   build: ./apps/stream-engine
+  #   container_name: sv-stream-engine-dev
+  #   restart: unless-stopped
+  #   env_file: .env 
+  #   environment:
+  #     - TG_API_ID=${TG_API_ID}
+  #     - TG_API_HASH=${TG_API_HASH}
+  #     - TG_ENGINE_BOT_TOKEN=${TG_ENGINE_BOT_TOKEN}
+  #   expose:
+  #     - "8000"
+  #   networks:
+  #     - sv-internal
 
   # --- 3. THE BRAIN (Manager API) ---
   manager:
@@ -65,20 +64,20 @@ services:
       - sv-internal
 
   # --- 5. MANGA WORKER (ReadVault Librarian) ---
-  worker-manga:
-    image: python:3.10-slim # Placeholder until we write code
-    container_name: sv-worker-manga-dev
-    command: ["tail", "-f", "/dev/null"]
-    networks:
-      - sv-internal
+  # worker-manga:
+  #   image: python:3.10-slim # Placeholder until we write code
+  #   container_name: sv-worker-manga-dev
+  #   command: ["tail", "-f", "/dev/null"]
+  #   networks:
+  #     - sv-internal
 
   # --- 6. THE FACE (Frontend Placeholder) ---
-  web:
-    image: node:20-alpine
-    container_name: sv-web-dev
-    command: ["sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null"]
-    networks:
-      - sv-internal
+  # web:
+  #   image: node:20-alpine
+  #   container_name: sv-web-dev
+  #   command: ["sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null"]
+  #   networks:
+  #     - sv-internal
 
 networks:
   sv-internal:
