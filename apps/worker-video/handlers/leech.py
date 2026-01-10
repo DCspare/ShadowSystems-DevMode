@@ -17,9 +17,7 @@ class MediaLeecher:
         try:
             info = PTN.parse(raw_name)
             title = info.get('title', 'Unknown')
-            year = f" ({info.get('year')})" if info.get('year') else ""
-            quality = f" {info.get('quality')}" if info.get('quality') else ""
-            return f"{self.branding} {title}{year}{quality}"
+            return f"{self.branding} {title}"
         except:
             return f"{self.branding} {raw_name}"
 
@@ -30,10 +28,8 @@ class MediaLeecher:
             return 0
 
     async def upload_progress(self, current, total):
-        # Progress Log throttling
         if total > 0:
             percentage = current * 100 / total
-            # Log only at 10% increments to save terminal spam
             if int(percentage) % 10 == 0 and int(percentage) != getattr(self, '_last_log_pct', -1):
                 logger.info(f"📤 Uploading: {percentage:.1f}%")
                 self._last_log_pct = int(percentage)
@@ -47,7 +43,7 @@ class MediaLeecher:
             logger.info(f"🚀 Starting Upload: {file_name}")
             self._last_log_pct = -1
             
-            # 1. Telegram Upload
+            # Upload
             sent_msg = await self.client.send_document(
                 chat_id=log_channel,
                 document=file_path,
@@ -57,13 +53,15 @@ class MediaLeecher:
                 progress=self.upload_progress
             )
 
-            # 2. Extract Data
+            # --- KEY FIX: DECODING LOGIC ---
             doc = sent_msg.document
             decoded = FileId.decode(doc.file_id)
             
             file_data = {
                 "quality": PTN.parse(file_name).get('quality', '720p'),
                 "telegram_id": doc.file_id,
+                # 🛡️ STORE LOCATION FOR REFRESHING
+                "location_id": sent_msg.id,
                 "file_size": doc.file_size,
                 "mime_type": doc.mime_type,
                 "added_at": int(time.time()),
@@ -74,39 +72,30 @@ class MediaLeecher:
                 }
             }
 
-            # 3. Safe Database Upsert
-            try:
-                # PATH A: Document Exists -> Update (using Protected Operators)
-                existing = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
-                
-                if existing:
-                    await self.db.library.update_one(
-                        {"_id": existing["_id"]},
-                        {"$push": {"files": file_data}, "$set": {"status": "available"}}
-                    )
-                    logger.info(f"✅ DB UPDATED: Added to library {tmdb_id}")
-                
-                # PATH B: New Skeleton Document
-                else:
-                    new_doc = {
-                        "tmdb_id": int(tmdb_id),
-                        "title": f"Processing Upload {tmdb_id}",
-                        "clean_title": f"upload {tmdb_id}",
-                        "short_id": str(uuid.uuid4())[:7],
-                        "media_type": "movie",
-                        "status": "available",
-                        "visuals": { "poster": None },
-                        "files": [file_data]
-                    }
-                    await self.db.library.insert_one(new_doc)
-                    logger.info(f"✅ DB INSERTED: New skeleton for {tmdb_id}")
+            # Upsert Logic
+            existing = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
+            
+            if existing:
+                await self.db.library.update_one(
+                    {"_id": existing["_id"]},
+                    {"$push": {"files": file_data}, "$set": {"status": "available"}}
+                )
+                logger.info(f"✅ DB UPDATED: {tmdb_id}")
+            else:
+                new_doc = {
+                    "tmdb_id": int(tmdb_id),
+                    "title": f"Upload {tmdb_id}",
+                    "short_id": str(uuid.uuid4())[:7],
+                    "media_type": "movie",
+                    "status": "available",
+                    "visuals": { "poster": None },
+                    "files": [file_data]
+                }
+                await self.db.library.insert_one(new_doc)
+                logger.info(f"✅ DB INSERTED: {tmdb_id}")
 
-                return True
-
-            except Exception as e:
-                logger.error(f"❌ DB Critical Error: {e}")
-                return False
+            return True
             
         except Exception as e:
-            logger.error(f"❌ Upload Protocol Failed: {e}")
+            logger.error(f"Upload Logic Fail: {e}")
             return False

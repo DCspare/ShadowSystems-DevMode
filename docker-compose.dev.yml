@@ -19,19 +19,23 @@ services:
       - sv-internal
 
   # --- 2. THE ENGINE (The Muscle) ---
-  # stream-engine:
-  #   build: ./apps/stream-engine
-  #   container_name: sv-stream-engine-dev
-  #   restart: unless-stopped
-  #   env_file: .env 
-  #   environment:
-  #     - TG_API_ID=${TG_API_ID}
-  #     - TG_API_HASH=${TG_API_HASH}
-  #     - TG_ENGINE_BOT_TOKEN=${TG_ENGINE_BOT_TOKEN}
-  #   expose:
-  #     - "8000"
-  #   networks:
-  #     - sv-internal
+  stream-engine:
+    build: ./apps/stream-engine
+    container_name: sv-stream-engine-dev
+    environment:
+      - TG_API_ID=${TG_API_ID}
+      - TG_API_HASH=${TG_API_HASH}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN}           # Fallback
+      - TG_SESSION_STRING=${TG_SESSION_STRING} # <--- NEW: The Userbot Login Key
+    volumes:
+      # This stores the "Brain" (Peer/Channel Cache) so it doesn't forget hashes
+      - ./data/sessions:/app/sessions 
+    env_file: .env
+    expose:
+      - 8000
+    networks:
+      - sv-internal
+
 
   # --- 3. THE BRAIN (Manager API) ---
   manager:
@@ -72,12 +76,12 @@ services:
   #     - sv-internal
 
   # --- 6. THE FACE (Frontend Placeholder) ---
-  # web:
-  #   image: node:20-alpine
-  #   container_name: sv-web-dev
-  #   command: ["sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null"]
-  #   networks:
-  #     - sv-internal
+  web:
+    image: node:20-alpine
+    container_name: sv-web-dev
+    command: [ "sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null" ]
+    networks:
+      - sv-internal
 
 networks:
   sv-internal:

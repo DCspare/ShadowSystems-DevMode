@@ -1,3 +1,4 @@
+# apps/gateway/Dockerfile 
 FROM nginx:alpine
 
 # The environment variable injection path

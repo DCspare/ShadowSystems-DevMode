@@ -16,6 +16,22 @@ logger = logging.getLogger("Library")
 # Router handles the /library prefix internally
 router = APIRouter(prefix="/library", tags=["Library"])
 
+@router.get("/internal/stream_meta/{telegram_id:path}")
+async def internal_resolver(telegram_id: str):
+    try:
+        clean_id = telegram_id.split('?')[0]
+        db_item = await db_service.db.library.find_one({"files.telegram_id": clean_id}, {"files.$": 1})
+        if not db_item: raise HTTPException(status_code=404)
+
+        file_rec = db_item["files"][0]
+        headers = {
+            "X-Location-Msg-ID": str(file_rec.get("location_id", "")),
+            "X-Location-Chat-ID": os.getenv("TG_LOG_CHANNEL_ID")
+        }
+        return JSONResponse(content={"status": "ok"}, headers=headers)
+    except Exception:
+        raise HTTPException(status_code=400)
+
 @router.get("/search")
 async def search_online(q: str, type: str = "movie"):
     """Search for titles live on TMDB"""
@@ -46,21 +62,6 @@ async def get_by_slug(short_id: str, request: Request):
             file["stream_url"] = f"/stream/{file['telegram_id']}?{sig}"
     item["_id"] = str(item["_id"])
     return item
-
-@router.get("/internal/stream_meta/{telegram_id:path}")
-async def internal_resolver(telegram_id: str):
-    """Sub-request resolver used strictly by Nginx Gateway."""
-    try:
-        clean_id = telegram_id.split('?')[0]
-        fid = FileId.decode(clean_id)
-        headers = {
-            "X-Media-ID": str(fid.media_id),
-            "X-Access-Hash": str(fid.access_hash),
-            "X-File-Ref": fid.file_reference.hex()
-        }
-        return JSONResponse(content={"status": "ok"}, headers=headers)
-    except Exception:
-        raise HTTPException(status_code=400)
 
 @router.post("/index/{media_type}/{tmdb_id}")
 async def index_content(media_type: str, tmdb_id: int):

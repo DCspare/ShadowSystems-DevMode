@@ -5,30 +5,69 @@ events {
 http {
     include       mime.types;
     default_type  application/json;
+    
+    # 0. Global Settings
+    sendfile on;
 
     upstream manager_api { server manager:8000; }
-    
-    # -----------------------------------
-    # STREAMING ENGINE TEMPORARILY DISABLED
-    # upstream go_engine { server stream-engine:8000; }
-    # -----------------------------------
+    upstream go_engine   { server stream-engine:8000; }
 
     server {
         listen 80;
-        access_log /dev/stdout;
-        error_log /dev/stderr;
+        set $secure_link_secret "${SECURE_LINK_SECRET}"; 
 
-        # --- 📡 API GATEWAY ---
+        # --- STREAM ROUTE ---
+        location ~ ^/stream/([^?]+) {
+            set $fid $1;
+            
+            # 1. Verify Token
+            secure_link $arg_token,$arg_expires;
+            secure_link_md5 "$secure_link_expires$uri$remote_addr $secure_link_secret";
+
+            if ($secure_link = "") { return 403 '{"error": "FORBIDDEN"}'; }
+            if ($secure_link = "0") { return 410 '{"error": "EXPIRED"}'; }
+            
+            # 2. Ask Python for Metadata
+            auth_request /_internal/lookup_meta;
+            
+            # 3. Capture Python Responses (Location Data)
+            # Nginx converts X-Header-Name to $upstream_http_x_header_name (lowercase, underscores)
+            auth_request_set $loc_msg_id $upstream_http_x_location_msg_id;
+            auth_request_set $loc_chat_id $upstream_http_x_location_chat_id;
+            auth_request_set $loc_chat_hash $upstream_http_x_location_chat_hash; # ➕ Capture Hash
+
+            # 4. Handoff to Go
+            proxy_pass http://go_engine;
+            
+            # Send the Captured Location headers
+            proxy_set_header X-Location-Msg-ID $loc_msg_id;
+            proxy_set_header X-Location-Chat-ID $loc_chat_id;
+            proxy_set_header X-Location-Chat-Hash $loc_chat_hash; # ➕ Pass to Go
+            proxy_set_header Range $http_range;
+            
+            proxy_buffering off;
+        }
+
+        # Python Resolver Bridge
+        location = /_internal/lookup_meta {
+            internal;
+            proxy_pass http://manager_api/library/internal/stream_meta/$fid;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+        }
+
         location /api/ {
             rewrite ^/api/(.*)$ /$1 break;
             proxy_pass http://manager_api;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "Upgrade";
         }
 
-        # Default to Python Brain
         location / {
-            proxy_pass http://manager_api;
+            return 200 "Shadow Gateway Online";
         }
     }
 }
