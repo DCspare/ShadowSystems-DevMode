@@ -54,6 +54,20 @@ Unlike the public facing "Cinematic" UI, the Admin Panel focuses on **Data Densi
     *   Visual indicators next to external links (e.g., `[VidHide: 🟢 Active]`, `[StreamTape: 🔴 Deleted]`).
     *   **Action:** `[Re-Upload Embeds]` button that triggers the Manager to grab the file from pixeldrain or other backup hosts and re-push it to the failed host.
 
+*   **ShadowTunes Manager (Music Tab):**
+        *   **Ingest Tool:** Input box for YouTube/Spotify Playlist URL.
+        *   **Track Editor:** Drag & Drop sort order for Album tracks.
+        *   **Metadata Fix:** Upload "Square" Album Art manually if the automated scrape gets low resolution.
+
+*   **"Archive" Link Manager (Download Hub):**
+        *   **UI:** A dedicated tab inside the Movie Editor Modal: `[ Streaming ] | [ Downloads ]`.
+        *   **The Grid:** Lists all active mirrors for the Archive Page (PixelDrain, Gofile, Mega, HubCloud).
+            *   *Columns:* Provider Icon | URL (masked) | Click Count | Status (🟢/🔴).
+        *   **Actions:**
+            *   `[Add Mirror]:` Paste a URL manually (e.g., if you manually uploaded to Mega).
+            *   `[Batch Health Check]:` Pings all download links to see if the file was deleted by the host. If 404, marks status as `dead`.
+            *   `[Daisy-Chain Upload]:` Trigger a background task to take the current Telegram file and remote-upload it to a specific host (e.g., "Upload to Gofile") to replenish dead links.
+
 ### C. Swarm Controller (Ingestion)
 *Managing the Bots without Terminal access.*
 *   **Worker Status Grid:** List of 10 workers showing "Idle", "Downloading", or "FloodWait" status.

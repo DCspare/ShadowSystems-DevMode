@@ -97,6 +97,10 @@ We strictly separate **Administrative Logic** from **Heavy Transfer Logic** to p
 *   **Optimization Rule (Zero-Bandwidth Forwarding):**
         *   When delivering the file to the user's DM (after upload to Log Channel), the bot **MUST** use the Telegram `send_document(file_id=...)` method using the generated File ID.
         *   **Constraint:** Do NOT re-upload the file bytes to the user. This ensures 0% bandwidth usage for the delivery leg.
+- [ ] **Manual Cache Health Probe (`/health`)**
+  *   **Feature:** Command listener handles `/health` trigger from Log Channel.
+  *   **Logic:** Upon receiving the message, Pyrogram internally captures and caches the Channel's Access Hash.
+  *   **Usage:** Mandatory manual step if a worker gets "Peer ID Invalid" errors on a fresh container deployment.
     
 - [ ] **Multi-Source Mirroring**
   Simultaneously uploads copies to Backup Hosts (Abyss.to / StreamWish) to create a RAID-1 redundancy layer in case of Telegram bans.
@@ -110,6 +114,12 @@ We strictly separate **Administrative Logic** from **Heavy Transfer Logic** to p
         *   **Config:** Requires a secondary `TG_BACKUP_CHANNEL_ID`.
         *   **Action:** Immediately after uploading to the Main Log Channel, the bot **Forwards** the message to the Backup Channel.
         *   **Why:** Ensures that if the Main Channel is banned by Telegram, the file integrity survives in the backup location (Zero bandwidth cost).
+
+**Multi-Hoster Mirroring**
+- [ ] **Multi-Up Strategy (Download Mirrors):**
+  *   **Logic:** Worker maintains API integrations for **PixelDrain** and **Gofile** (as they allow anonymous API uploads).
+  *   **HubCloud/Drive:** If we support these, use "Remote Upload" via the PixelDrain link to populate them without burning bandwidth.
+  *   **Storage:** Store ALL returned URLs in the `downloads` array for the Archive Page.
     
 - [ ] **Smart Renaming Engine**
   Standardizes filenames (PTN Parser) to remove spam tags (`[x265]`, `www.site.com`) and injects "StreamVault" branding before upload.

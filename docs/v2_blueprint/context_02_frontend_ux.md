@@ -61,6 +61,12 @@
 - [ ] **Failover Logic**
   Javascript event listener on `<video error>`: if Primary Stream (Telegram) fails, auto-swaps `src` to the Backup Mirror (Abyss.to).
 
+- [ ] **Access Protocol Modal (The Choice)**
+  *   **UI:** Glass Card overlay on the Player.
+  *   **Option 1:** "Watch Free" (VidHide + Ads).
+  *   **Option 2:** "Activate Shadow Pass" (Oracle + No Ads + 12h Timer).
+  *   **Visuals:** Use the "Lock Icon" and "Timer Icon" to visually communicate the trade-off.
+
 ### C 1. The Web Player (Headless Hybrid Engine)
 **Core Tech:** **ArtPlayer.js** (Wrapped in React).
 *Why:* Provides a robust HLS/VAST engine but allows full "Skinning" to match the Obsidian Glass aesthetic.
@@ -158,6 +164,11 @@
   *   **Config:** `images: { unoptimized: true }`.
   *   **Logic:** Force usage of standard `<img>` tags pointing to `API_URL/proxy/image` to bypass Vercel billing limits.
   *   **CLS Prevention:** All manga images must be wrapped in `animate-pulse` skeleton `div`s with Aspect Ratio preservation to stop layout shifts.
+
+- [ ] **PWA Lifecycle Manager (Updater Toast)**
+  *   **Event Listener:** Listen for service worker state changes (`waiting` state).
+  *   **UI:** Show a "Glass Toast" with a [REFRESH] button when a new build is detected in the background.
+  *   **Logic:** `workbox.messageSkipWaiting()` to force the new cache to take over immediately upon click.
 
 ---
 
@@ -300,3 +311,79 @@
 *   **Mobile:** 
     *   **Search:** Dedicated Tab in Bottom Nav.
     *   **Filtering:** "Chip Scroller" at the top (`[Action] [Adventure] [New]`).
+
+------
+
+## ✨ 8. Advanced UX Micro-Interactions (The "App" Feel)
+*Goal: Remove "Website" behaviors (scrolling blankly) and replace with "Console" behaviors.*
+
+### A. Ambient Mode (Idle State)
+*   **Trigger:** Mouse/Touch inactivity > 60s (Configurable).
+*   **Visual:** Cross-fading background carousel of High-Res "Fan Art" (sourced from TMDB/fanart.tv) related to User's active watchlist.
+*   **Overlay:** Minimalist Clock + "Next Up: Solo Leveling (20m)" ticker at bottom left.
+*   **Exit:** Any input restores full Dashboard.
+
+### B. Custom Context Menus
+*   **Desktop:** Override default browser Right-Click.
+*   **Mobile:** Long-Press gesture.
+*   **Menu Options (Context Sensitive):**
+    *   *On Poster:* `[Quick Play]` `[Add to Collection]` `[Copy Share Link]`.
+    *   *On Player:* `[Snapshot]` `[Fit to Screen]` `[Stats for Nerds]`.
+
+### C. The "Module" Settings UI
+*   **Design:** A grid of "Cards" representing features, simulating a Plugin Store.
+*   **Toggles:**
+    *   "NSFW Protocol" (Switch).
+    *   "Data Saver Engine" (Switch).
+    *   "Visualizer: Audio" (Switch).
+*   **Theming:** Color picker and Font scale represented as graphical blocks, not dropdowns.
+
+### D. Calendar Visualizer
+*   **Style:** Horizontal Time-Stream.
+*   **Indicator:** A vertical "Live Now" line moves across the grid based on user's timezone.
+*   **Filters:** Switch between `[Global Release]` (Everything) vs `[My Library]` (Only shows I watch).
+
+---
+
+## 🌐 9. The Portal System (Unified Domains)
+*Goal: Provide distinct visual experiences for Movies vs Anime without splitting domains/users.*
+
+### A. The Gateway (Home / )
+*   **Design:** A minimalist landing page containing 3 distinct "Hub Entrances". Animated Cards
+*   **Card 1: 🎬 CINEMA:** Routes to `/cinema/` (Movies/Series). Visuals optimize for Horizontal Posters, Live-Action logic. Shows "Cast/Rotten Tomatoes". Logic: `genre != Animation`.
+*   **Card 2: ⛩️ ANIME:** Routes to `/anime/` (Anime/Manga). Visuals optimize for Vertical Posters, Grid Schedules. Shows "Voice Actors/MyAnimeList". Logic: `genre == Animation`.
+*   **Card 3: 🎵 TUNES:** Routes to `/tunes/` (Audiobooks/OSTs). Visuals optimize for Square Album art.
+  
+*   **Cookie Persistence:**
+    *   When user selects a Hub, set cookie: `preferred_hub=anime`.
+    *   **Next Visit:** Middleware redirects `/` -> `/anime` automatically (skipping the Gateway).
+    *   **Switching:** "Exit" button in the Sidebar clears the cookie and shows the Gateway.
+
+### B. Adaptive Navigation (Zustand State)
+*   **Logic:** The Global Sidebar adapts its icons based on the Active Hub.
+    *   *In Anime Hub:* The "Calendar" icon appears (for Simulcasts).
+    *   *In Cinema Hub:* The "Collections" icon appears (for Marvel/DC universes).
+    *   *Shared State:* Search, Profile, and Settings remain constant across all hubs.
+ 
+*   **The Problem:** Global "Home" buttons usually link to root.
+*   **The Fix:** The Navigation Component must subscribe to `useStore((state) => state.activeUniverse)`.
+    *   **Cinema Mode:** Home Icon links to `/cinema`. Search defaults to "Movies".
+    *   **Anime Mode:** Home Icon links to `/anime`. Search defaults to "Anime + Manga".
+    *   **Music Mode:** Home Icon links to `/tunes`. UI switches to Audio Visualizer.
+ 
+### C. Visual Identity Shifting
+*   **Theme Engine:** Uses CSS variables mapped to the Universe.
+    *   **Cinema:** Obsidian Black + Neon Cyan (`#00d8ff`).
+    *   **Anime:** Deep Violet + Electric Purple (`#9d00ff`) + "Schedule" Icon appears.
+    *   **Tunes:** Midnight Blue + Soundwave Yellow.
+
+---
+
+## 🗃️ 10. The Archive Page (Download Hub)
+**Goal:** A centralized intermediate page for file hosting options, mirroring "ToonWorld4All" functionality.
+
+*   **Route:** `/archive/{short_id}`.
+*   **Header Info:** Shows content image, filename, specific file size (e.g., "850 MB"), and upload date.
+*   **Host Grid:** Dynamic list of cards based on `file.downloads[]` from DB.
+    *   Cards show: Provider Logo, Hostname, and CTA Button.
+*   **Link Masking:** Buttons do NOT link directly to `mega.nz`. They link to `/api/shorten/redirect?target={url_id}` to ensure monetized click-through.

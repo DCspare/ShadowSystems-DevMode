@@ -148,6 +148,43 @@ Unlike web browsers, OPDS readers need specific navigation for "Page 1 -> Page 2
 *   **Share Link:** `https://shadow.xyz/watch/party/{room_code}` (Deep links directly to the player).
 *   **Admin Override:** Admin console capability to send "Global System Alerts" to all active socket connections (e.g., "Server Restarting").
 
+## 🧠 10. Content Enrichment & Schedule Engine
+**Objective:** Transform the site from a "Folder" into a "Wiki", and automate the release calendar.
+
+### A. The Metadata Deep-Dive
+*   **Source:** Expand TMDB/Jikan scrapers to fetch `/credits` (Cast/Crew) and `/images` (High-res Backdrops).
+*   **Database Storage Strategy:**
+    *   Store `cast` as an array of objects: `[{ "tmdb_id": 123, "name": "Actor", "role": "Main", "img": "url" }]`.
+    *   **Performance:** Create a Multikey Index on `cast.tmdb_id`. This allows instant "Cross-Linking" (Finding all movies where Actor ID 123 appears) without creating a massive new relational table.
+*   **Display:** "Cast Grid" on Details Page. Hovering shows character Name.
+
+### B. Simulcast Scheduler Logic
+*   **The Backend Job:** Cron job scans "Ongoing" Series/Anime in DB via AniList/TVMaze API.
+*   **Action:** Updates a `next_airing` (ISO Date) field in the `series` collection.
+*   **Frontend Output:** A dedicated JSON endpoint `/api/schedule/weekly` populates the "VoidAnime-Style" Weekly Calendar.
+
+## 🚀 11. Stream Engine V3 (The `gotd` Upgrade)
+**Objective:** Reduce streaming RAM usage from ~15MB (Python/Pyrogram) to ~150KB (Golang).
+
+### A. Architecture Shift
+*   **Library:** Replace standard HTTP/Python libraries with **`gotd/td`** (Native MTProto implementation for Golang).
+*   **Logic:**
+    *   Eliminates the Python->C wrapper overhead.
+    *   Establishes raw **TCP sockets** directly to Telegram Datacenters within the Go binary.
+    *   **Pipe:** `Telegram TCP Socket` -> `IO Pipe` -> `User HTTP Response`.
+*   **Benefit:** Allows the Oracle Free Tier to handle approx **3x - 5x more concurrent users** per CPU core compared to Phase 2.
+
+## 💎 12. "Debrid" Hybrid Caching
+**Objective:** Eliminate Telegram Leech waiting times for viral content by tapping into cached torrent clouds.
+
+### A. Integration
+*   **Provider:** Real-Debrid / AllDebrid API integration (Admin Account).
+*   **Workflow (The "Instant" Check):**
+    1.  User requests popular torrent/movie.
+    2.  System checks Debrid API hash cache.
+    3.  **Yes:** System generates a specialized "Unrestricted Link" and streams DIRECTLY from Debrid (10Gbps line) to the User. *Zero Telegram usage.*
+    4.  **No:** System falls back to standard Worker Swarm (Telegram Leech).
+    
 ---
 
 **End of Phase 3 Blueprint.**

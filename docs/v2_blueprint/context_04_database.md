@@ -11,7 +11,7 @@
 ```json
 {
   "_id": "tmdb_299534",             // Primary Key
-  "short_id": "v7K1wP2",          // 7-character Base62 Slug
+  "short_id": "v7K1wP2",            // 7-character Base62 Slug
   "media_type": "movie",            // movie | series | manga
   "title": "Avengers: Endgame",
   "clean_title": "avengers endgame",
@@ -37,6 +37,13 @@
       "telegram_id": "BAACAg...",
       "file_hash": "nginx_cache_key", // VIP Source (ShadowStream)
 
+// ➕ CRITICAL: RAW MTPROTO KEYS (Required for Go Engine/gotgproto)
+      "tg_raw": {
+          "media_id": 123456789,
+          "access_hash": -987654321,
+          "file_reference": "060000..." 
+      },
+
       // Public Embeds (Free Tier)
       "embeds": [
         { "host": "VidHide", "url": "https://vidhide.com/embed/xyz", "priority": 1 },
@@ -49,6 +56,28 @@
       "subtitles": [
         { "lang": "eng", "index": 3 }, // Stream #0:3
         { "lang": "spa", "index": 4 }
+      ],
+
+      // ➕ NEW: The Archive Page Data
+      "downloads": [
+        { 
+          "host": "Gofile", 
+          "url": "https://gofile.io/d/xyz", 
+          "icon": "icon_gofile.png",
+          "status": "active" 
+        },
+        { 
+          "host": "PixelDrain", 
+          "url": "https://pixeldrain.com/u/xyz", 
+          "icon": "icon_pixeldrain.png", 
+          "status": "active" 
+        },
+        { 
+          "host": "HubCloud", 
+          "url": "https://hubcloud.club/...", 
+          "icon": "icon_hubcloud.png",
+          "status": "dead" // Bot checks this
+        }
       ]
     }
   ]

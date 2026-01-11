@@ -160,7 +160,7 @@ Accessible via `client-domain.com/admin` (Limited View).
   *   **Safety:** Prevents franchisees from messing up the Global Library with bad titles or typos.
 ---
 
-## 🛡️ 6. Safety Protocols (Legal Isolation)
+## 🛡️ 6. Tech Stack & Safety Protocols (Legal Isolation)
 
 1.  **DNS Isolation:**
     *   Tenant domains are **never** hosted on your Cloudflare account.
@@ -168,6 +168,16 @@ Accessible via `client-domain.com/admin` (Limited View).
     *   *Reason:* If they get DMCA-banned by Cloudflare, it does not affect your master account.
 2.  **No Direct Linking:**
     *   They never get the Raw Telegram Files. Everything proxies through your API via the Tenant Token. You can "Kill Switch" a tenant instantly if they break rules (e.g., uploading illegal content/spam).
+
+### The "App Builder" Stack (Bubblewrap CLI)
+To fulfill the **$10/mo Android App** upsell without manual coding:
+*   **Tooling:** Use **Google Bubblewrap** (CLI Node.js tool) to wrap the PWA into a TWA (Trusted Web Activity).
+*   **Workflow (Admin Localhost):**
+    1.  **Config:** Maintain a `twa-config.json` for each Tenant (Logo, URL, Theme Color).
+    2.  **Build Command:** `bubblewrap build --manifest=https://tenant.com/manifest.json`.
+    3.  **Signing:** Auto-sign the APK using a generic "Shadow Keystore".
+    4.  **Delivery:** Upload the resulting `.apk` to PixelDrain and email the link to the Tenant.
+*   *Note:* This process is run locally by the Admin or via GitHub Actions, NOT on the Oracle Server (to save RAM/Disk).
 
 ---
 

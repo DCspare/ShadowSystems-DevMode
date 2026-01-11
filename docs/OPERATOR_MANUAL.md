@@ -56,7 +56,7 @@ docker ps
 
 ---
 
-#### 💻 3. Infrastructure Control (Linux & Shell)
+#### 💻 3 A. Infrastructure Control (Linux & Shell)
 *Direct manipulation of the host environment and container interiors.*
 
 ```bash
@@ -88,6 +88,20 @@ docker system prune -f
 docker exec -it sv-gateway-dev sh -c "rm -rf /var/cache/nginx/streamvault/*"
 ```
 
+### 🧹 3 B: The "Aggressive Prune" Script
+*Running `docker system prune` is good, but `prune --volumes` is better for dev work (cleans up orphan DB/Cache volumes), and `prune -a` removes unused images (old builds).*
+
+
+```bash
+# 1. Stop everything
+docker compose -f docker-compose.dev.yml down
+
+# 2. Nuclear Clean (Removes stopped containers + unused networks + dangling images + build cache)
+docker system prune -af --volumes
+
+```
+
+
 ---
 
 #### 📡 4. API Interaction (Curl Testing)
@@ -115,7 +129,7 @@ curl http://localhost:8080/api/library/view/v7K1wP2
 
 ---
 
-#### 🐙 5. Repository Management (Git Sync)
+#### 🐙 5 A. Repository Management (Git Sync)
 *Saving progress and version-tagging stable milestones.*
 
 ```bash
@@ -140,4 +154,87 @@ git push --tags
 # --- For code push repo authentication ---
 # Format: https://{YOUR_USERNAME}:{YOUR_TOKEN}@github.com/{USERNAME}/{REPO_NAME}.git
 git remote set-url origin https://YourUsername:ghp_yourTokenHERE@github.com/DCspare/ShadowSystems-DevMode.git
+```
+
+#### 🕸️ 5 B. Git Feature Workflow (Safety Net)
+*Standard procedure for starting new code to avoid breaking `main`.*
+
+```bash
+# 1. START: Create a new branch for a feature (e.g., frontend player)
+git checkout -b feat/frontend-player
+
+# 2. SAVE: Stage and commit changes frequently
+git add .
+git commit -m "feat(web): Added ArtPlayer component"
+
+# 3. MERGE: Switch back to main and merge when perfect
+git checkout main
+git pull origin main
+git merge feat/frontend-player
+
+# 4. RELEASE: Tag a stable version
+git tag -a v0.4.0 -m "Frontend Alpha"
+git push origin main --tags
+
+# 5. CLEANUP: Delete the feature branch
+git branch -d feat/frontend-player
+```
+
+---
+
+#### 🧪 6. Real World Diagnostics (Shadow Protocols)
+*Specific workflows to fix common issues faced during development.*
+
+**Scenario A: The "Stuck Bot" (Fixing Peer/Channel Invalid Errors)**
+*Use this when the Worker or Stream Engine fails to upload/stream because it "Forgot" the channel hash.*
+
+```bash
+# 1. Watch the Worker Log for "Peer ID Invalid" or "Handshake Failed"
+docker logs -f sv-worker-video-dev
+
+# 2. Watch the Stream Engine for "Channel Not Found" or "File Reference Expired"
+docker logs -f sv-stream-engine-dev
+
+# 3. THE FIX: Go to your Telegram "ShadowSystems Log" channel and send:
+/health
+
+# 4. Verify in Logs:
+# You should see: "✅ Found Target Channel" or "📩 Stream Engine received update"
+```
+
+**Scenario B: Database Hygiene (Fixing Bad Leech Metadata)**
+*Use this when you leeched a file using the wrong TMDB ID, and now your database has a "Skeleton" entry you need to wipe.*
+
+```bash
+# 1. Search to find the incorrect TMDB_ID
+curl "http://localhost:8080/api/library/search?q=WrongMovie"
+
+# 2. NUKE the entry from MongoDB (Does not delete file from Telegram)
+curl -X DELETE http://localhost:8080/api/library/delete/12345
+
+# 3. Manually Index the CORRECT Metadata (Pre-leech)
+curl -X POST http://localhost:8080/api/library/index/movie/99999
+```
+
+**Scenario C: Identity Generation (The Session String)**
+*How to generate the `TG_SESSION_STRING` without running the whole Docker stack.*
+
+```bash
+# 1. Install dependencies locally (if Python is installed on host)
+pip install pyrogram tgcrypto
+
+# 2. Create the generator script (if missing)
+cat <<EOF > gen_session.py
+import asyncio
+from pyrogram import Client
+api_id = input("API ID: ")
+api_hash = input("API HASH: ")
+async def main():
+    async with Client(":memory:", api_id=api_id, api_hash=api_hash) as app:
+        print(await app.export_session_string())
+if __name__ == "__main__": asyncio.run(main())
+EOF
+
+# 3. Run and Copy String to .env
+python3 gen_session.py
 ```

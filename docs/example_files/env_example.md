@@ -1,6 +1,6 @@
  **Reference Usage:**
 > **Env:** Copy contents of `env_example.md` to `.env` in the root folder.
-> *Note: Do NOT commit your real `.env` file to GitHub. Add it to `.gitignore` first before committing files.*
+> *Note: Do **NOT** commit your real `.env` file to GitHub. Add it to `.gitignore` first before committing files.*
 
  ---------------------------------------------------
 ### 🌍 PROJECT: Shadow Systems (V2 + ReadVault Lite)
@@ -53,7 +53,8 @@ TG_BOT_TOKEN=123:ABC_Def...
 TG_LOG_CHANNEL_ID=-100xxxxxxxxxx 
 # Secret Redundancy Storage (Forward Copy)
 TG_BACKUP_CHANNEL_ID=-100xxxxxxxxxx
-
+# Where Audio files (OST/Music) are uploaded
+TG_MUSIC_CHANNEL_ID=-100xxxxxxxxxx
 
 # Where Updates/Cards are posted
 TG_UPDATE_CHANNEL_ID=-100xxxxxxxxxx

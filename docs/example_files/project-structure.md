@@ -92,6 +92,9 @@ SHADOW-SYSTEMS (Root Project)
 │       ├── requirements.txt
 │       └── Dockerfile
 │
+├── tools/
+│   ├── apkbuilder/                 # here we build PWA Apps for tensnts with (@bubblewrap/cli)
+│       └── twa-config.json
 ├── config/                         # External Configuration Files
 │   ├── prometheus.yml              # Monitoring Rules
 │   └── workers/                    # Store for Session Strings (Safe Mount)

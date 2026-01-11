@@ -82,7 +82,7 @@ export default function AdsterraPopunder() {
 }
 ```
 
-### B. Handling Shorteners (The Gateway Logic)
+### B a. Handling Shorteners (The Gateway Logic)
 Used for **"Download Season Pack"** or **"4K Source"**.
 
 1.  **User Action:** Clicks "Download Pack".
@@ -92,6 +92,20 @@ Used for **"Download Season Pack"** or **"4K Source"**.
 4.  **Redirect:** Frontend sends user to the *Shortened Link*.
 5.  **Completion:** User solves Captcha -> Returns to `verify_download`.
 6.  **Unlock:** Backend verifies token -> Sets `download_cookie` (Valid 1 hour) -> Redirects to actual Zip Stream.
+
+### B b. The "/archive" Redirector API
+*Dedicated endpoint for the Download Hub page (`/archive`).*
+
+**Endpoint:** `GET /api/shorten/redirect?target={encrypted_url_id}`
+
+**Logic Flow:**
+1.  **Lookup:** Backend decrypts/looks up the real target URL (e.g., `gofile.io/...`) from MongoDB.
+2.  **Safety Check:** Verifies the destination domain is in our "Allowed Mirrors" list (Prevents open redirect vulnerabilities).
+3.  **Shortening Strategy:**
+    *   *Ad-Block Check:* Optional header check.
+    *   *Provider Selection:* Can rotate between GPlinks/ShrinkMe if configured (Load balancing revenue).
+    *   *API Call:* Sends Target URL to `SHORTENER_API_URL` (from Env).
+4.  **Redirect:** Returns a `302 Found` header sending the user to the `gplinks.in/xyz` result.
 
 ### C a. VAST Video Ads (The "TV Experience")
 *Implemented directly inside the Video Player logic, independent of the page layout.*
@@ -226,6 +240,23 @@ A static glass-UI page reachable via Footer.
 *   **VIP Server Access:** Unlocks the **ShadowStream (Telegram)** player.
     *   *Why users pay:* To escape the aggressive ads and buffering of VidHide/StreamTape.
 *   **Bandwidth Logic:** Premium users fund the Oracle/VPS expansion. Free users cost $0 (served by Embeds), but we'll still get revenue by pop-under or banner ads.
+
+## 🎟️ 9. The "Shadow Pass" (Time-Wall Model)
+*Inspiration: Tooniboy. Trade "1 Action" for "12 Hours of Peace".*
+
+### A. The Offer
+A specific modal triggered when Guest users try to access **VIP Features** (4K, Oracle Server, Batch Downloads).
+*   **Proposition:** "Verify you are human to unlock VIP Server + Ad-Free Mode for 12 Hours."
+*   **Action:** User solves 1 Shortener Link (GPlinks).
+
+### B. The Mechanism (Stateless JWT)
+1.  **Generation:** Backend wraps a self-verifying Callback URL inside a Shortener API call.
+2.  **Verification:** Upon return, Backend sets a `shadow_pass` Secure Cookie valid for **43,200 seconds (12h)**.
+3.  **Privilege:** Middleware checks for this cookie. If present -> Disable Pop-unders, Disable VAST, Enable Oracle Streaming.
+
+### C. Financial Upside
+*   **Revenue Ratio:** 1 Pass Unlock = ~15 standard Pop-under views.
+*   **UX Benefit:** Users prefer doing "one hard task" to get "peace," increasing retention vs. sites that spam ads constantly.
 
 ---
 

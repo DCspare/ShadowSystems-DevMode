@@ -63,6 +63,7 @@ python-dotenv==1.0.1
 PTN==2.2.3              # CRITICAL: For parsing/renaming torrent file names
 hachoir==3.1.2          # CRITICAL: For Pyrogram video metadata extraction
 tenacity==8.2.3         # For robust retry logic if a Mirror Upload fails
+mutagen==1.47.0         # For embedding Album Art and ID3 tags into MP3s
 
 # --- Download Engines ---
 yt-dlp==2023.11.16      # The Gold Standard for scraping video from ANY site

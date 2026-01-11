@@ -13,8 +13,13 @@ services:
       - SECURE_LINK_SECRET=${SECURE_LINK_SECRET} # Pulls from your .env
     volumes:
       - ./data/cache:/var/cache/nginx/streamvault
-    depends_on:
-      - manager
+    # depends_on:
+    #   - manager
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
     networks:
       - sv-internal
 
@@ -33,6 +38,11 @@ services:
     env_file: .env
     expose:
       - 8000
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
     networks:
       - sv-internal
 
@@ -48,6 +58,11 @@ services:
       - ./apps/manager:/app
       - ./data/sessions:/app/sessions
       - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
     networks:
       - sv-internal
 
@@ -62,8 +77,13 @@ services:
     volumes:
       - ./apps/worker-video:/app
       - ./data/sessions:/app/sessions # Shared session mount
-    depends_on:
-      - manager
+    # depends_on:
+    #   - manager
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
     networks:
       - sv-internal
 
@@ -72,16 +92,26 @@ services:
   #   image: python:3.10-slim # Placeholder until we write code
   #   container_name: sv-worker-manga-dev
   #   command: ["tail", "-f", "/dev/null"]
+  #   logging:
+  #       driver: "json-file"
+  #       options:
+  #           max-size: "10m"
+  #           max-file: "3"
   #   networks:
   #     - sv-internal
 
   # --- 6. THE FACE (Frontend Placeholder) ---
-  web:
-    image: node:20-alpine
-    container_name: sv-web-dev
-    command: [ "sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null" ]
-    networks:
-      - sv-internal
+  # web:
+  #   image: node:20-alpine
+  #   container_name: sv-web-dev
+  #   command: [ "sh", "-c", "echo 'NextJS Waiting...' && tail -f /dev/null" ]
+  #   logging:
+  #       driver: "json-file"
+  #       options:
+  #           max-size: "10m"
+  #           max-file: "3"
+  #   networks:
+  #     - sv-internal
 
 networks:
   sv-internal:

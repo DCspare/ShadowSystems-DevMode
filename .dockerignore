@@ -1,0 +1,37 @@
+# 🚫 GIT
+.git/
+.gitignore
+.github/
+
+# 🚫 IDE
+.vscode/
+.idx/
+.idea/
+*.swp
+*.swo
+
+# 🚫 PYTHON BLOAT
+__pycache__/
+*.pyc
+venv/
+env/
+.env  # Never copy env into image layer, inject at runtime
+.pytest_cache/
+
+# 🚫 NODE BLOAT (Biggest offender)
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+npm-debug.log
+
+# 🚫 GO BLOAT
+apps/stream-engine/stream-engine  # Local binary
+go.work
+
+# 🚫 LOCAL DATA
+data/
+downloads/
+temp/
+config/workers/*.session # Don't bake sessions into image
+*.log
