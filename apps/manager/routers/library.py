@@ -20,7 +20,7 @@ router = APIRouter(prefix="/library", tags=["Library"])
 async def internal_resolver(telegram_id: str):
     """
     Called by Nginx auth_request.
-    Maps a Telegram ID -> MsgID + ChatID for the Go Engine.
+    Maps a Telegram ID -> MsgID + ChatID & Location ID for the Go Engine.
     """
     try:
         clean_id = telegram_id.split('?')[0]
@@ -34,46 +34,13 @@ async def internal_resolver(telegram_id: str):
 
         file_rec = db_item["files"][0]
 
-        # We need the RAW Message ID from the Telegram Metadata 
-        # (This relies on us saving 'tg_raw' correctly in leech.py)
-        # 1. Try to get Message ID (Preferred for Freshness)
-        msg_id = file_rec.get("location_id", "0")
-        
-        # 2. Get Raw Keys (Fallback/Direct)
-        tg_raw = file_rec.get("tg_raw", {})
-        media_id = str(tg_raw.get("media_id", "0"))
-        access_hash = str(tg_raw.get("access_hash", "0"))
-        file_ref = tg_raw.get("file_reference", "")
-
-        # Headers for Go Engine
         headers = {
-            "X-Allowed": "true",
-            "X-Location-Msg-ID": str(msg_id),
-            "X-Location-Chat-ID": os.getenv("TG_LOG_CHANNEL_ID", "0"),
-            # Raw Data Injection
-            "X-Telegram-Media-ID": media_id,
-            "X-Telegram-Access-Hash": access_hash,
-            "X-Telegram-File-Ref": file_ref
+            "X-Location-Msg-ID": str(file_rec.get("location_id", "")),
+            "X-Location-Chat-ID": os.getenv("TG_LOG_CHANNEL_ID")
         }
-        
         return JSONResponse(content={"status": "ok"}, headers=headers)
-    except Exception as e:
-        logger.error(f"Resolver failed: {e}")
+    except Exception:
         raise HTTPException(status_code=400)
-
-        # CRITICAL: We need Message ID, not File ID, for Seeking.
-        # Currently leech.py might not be saving message_id. 
-        # Standard Fallback: Nginx Secure Links verify PERMISSION. 
-        # The Go engine resolves the FILE via ID. 
-        # This headers logic is for complex session tracking if needed.
-        
-    #     return JSONResponse(content={"status": "ok"}, headers={
-    #         "X-Allowed": "true",
-    #         "X-Location-Msg-ID": str(file_rec.get("tg_raw", {}).get("media_id", "")), # Fallback safety
-    #         "X-Location-Chat-ID": os.getenv("TG_LOG_CHANNEL_ID")
-    #     })
-    # except Exception:
-    #     raise HTTPException(status_code=400)
 
 
 # --- 2. PUBLIC/FRONTEND ROUTES ---
