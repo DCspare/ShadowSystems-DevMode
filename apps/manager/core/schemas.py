@@ -21,6 +21,12 @@ class SubtitleTrack(BaseModel):
     lang: str
     index: int 
 
+class AudioTrackInfo(BaseModel): # ➕ NEW: Audio Metadata
+    lang: str
+    codec: str # e.g. aac, ac3, eac3
+    channels: float # 2.0, 5.1, 7.1
+    index: int
+
 class EmbedLink(BaseModel):
     host: str
     url: str
@@ -54,7 +60,7 @@ class FileData(BaseModel):
     # (Free Tier)
     embeds: List[EmbedLink] = []        # VidHide, StreamTape
     downloads: List[BackupLink] = []    # Gofile, PixelDrain (Archive Page)
-    added_at: datetime = Field(default_factory=datetime.utcnow)
+    added_at: int = Field(default_factory=lambda: int(datetime.utcnow().timestamp())) # (Unix Timestamp) for sorting performance
 
 # --- CONTENT SUB-SCHEMAS (Series/Manga Logic) ---
 
@@ -108,7 +114,7 @@ class LibraryItem(BaseModel):
     clean_title: str
     year: Optional[int] = None
     genres: List[str] = []
-    rating: float = 0.0
+    rating: float = 0.0     # # rating = The external Score (TMDB 3.5/10)
     status: str = "processing"      # available | processing | banned | repairing
     
     intro_timings: Optional[IntroTimings] = None     # { "start": 90, "end": 150, "votes": 5 }, Timestamp in seconds
@@ -215,7 +221,7 @@ class ContentRequest(BaseModel):
     title: str
     media_type: str
     requested_by_users: List[Union[int, str]] # List of User IDs who voted
-    vote_count: int = 1
+    vote_count: int = 0         # vote_count = Internal User Votes (Request Hub / Likes)
     status: str = "pending" # pending | filled | rejected
     created_at: datetime
 

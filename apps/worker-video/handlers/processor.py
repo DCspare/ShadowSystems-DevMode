@@ -40,6 +40,7 @@ class MediaProcessor:
         ]
         
         try:
+            # 1. Execute FFprobe
             process = await asyncio.create_subprocess_exec(
                 *cmd, 
                 stdout=asyncio.subprocess.PIPE, 
@@ -48,46 +49,89 @@ class MediaProcessor:
             stdout, stderr = await process.communicate()
             
             if process.returncode != 0:
-                logger.error(f"FFprobe failed: {stderr.decode()}")
-                return {}
+                logger.error(f"FFprobe Non-Zero: {stderr.decode()}")
+                # Fallback to defaults
+                return {"width": 0, "height": 0, "duration": 0.0, "subtitles": [], "audio": []}
 
+            # 2. Parse JSON Output
+            stdout = stdout.decode()
             data = json.loads(stdout)
             format_info = data.get("format", {})
-            streams = data.get("streams", [])
-
-            # --- Data Parsing for Schema ---
+            all_streams = data.get("streams", [])
             
-            # 1. Video Stats
-            video_stream = next((s for s in streams if s["codec_type"] == "video"), {})
+            # 3. Video Stats
+            video_stream = next((s for s in all_streams if s["codec_type"] == "video"), {})
+
             width = int(video_stream.get("width", 0))
             height = int(video_stream.get("height", 0))
+
+            # --- DETECT 10-BIT ---
+            pix_fmt = video_stream.get("pix_fmt", "")
+            is_10bit = "10le" in pix_fmt or "10bit" in pix_fmt
+
+            size_bytes = int(format_info.get("size", 0))
             duration = float(format_info.get("duration", 0))
 
-            # 2. Extract Subtitles (For Player Selector)
+            # 4. Extract Subtitles (For Player Selector)
             # Schema: SubtitleTrack(lang, index)
             subtitles = []
-            for stream in streams:
-                if stream.get("codec_type") == "subtitle":
-                    tags = stream.get("tags", {})
-                    # Try language code, title, or fallback to index
-                    lang = tags.get("language") or tags.get("title") or "unk"
+            for track in all_streams:
+                if track.get("codec_type") == "subtitle":
+                    tags = track.get("tags", {})
+                   # Logic: Get clean ISO code and Readable Title
+                    lang_code = tags.get("language", "unk")
+                    display_title = tags.get("title", lang_code)
+
+                    # Critical for mpv/artplayer Selection
                     subtitles.append({
-                        "index": stream["index"], # Critical for mpv/artplayer selection
-                        "lang": lang
+                        "index": int(track.get("index", 0)), 
+                        "lang": display_title,  # Store the readable title
+                        "code": lang_code    # Store the iso code
+                    }) 
+
+            # 5. Extract Audio (robust parsing)
+            audio_tracks = []
+            for track in all_streams:
+                if track.get("codec_type") == "audio":
+                    tags = track.get("tags", {})
+
+                    # Code: und -> Title? -> "unk"
+                    code = tags.get("language", "und")
+                    title = tags.get("title", "")
+                    
+                    # Garbage Filter for "Track 1"
+                    if code == "und" and title:
+                        if any(x in title.lower() for x in ['track', 'sound', 'stereo']):
+                            code = "unk"
+                        else:
+                            code = title[:3] # Use first 3 chars of title as makeshift code
+
+                    audio_tracks.append({
+                        "index": int(track.get("index", 0)), 
+                        "code": code if len(code) < 10 else "unk", 
+                        "codec": track.get("codec_name", "aac"), 
+                        "channels": float(track.get("channels", 2.0))
                     })
 
-            logger.info(f"🔍 Probed: {width}x{height}, {len(subtitles)} subs, {duration}s")
+            logger.info(f"🔍 PROBED: {width}x{height} {'(10-bit)' if is_10bit else ''}, {len(subtitles)} subs, {len(audio_tracks)} audio, {duration}s")
             
             return {
                 "width": width,
                 "height": height,
+                "is_10bit": is_10bit,
+                "size_bytes": size_bytes,
                 "duration": duration,
-                "subtitles": subtitles
+                "subtitles": subtitles,
+                "audio": audio_tracks
             }
 
         except Exception as e:
             logger.error(f"Probe Execution Error: {e}")
-            return {"duration": 0, "subtitles": []}
+            # Return safe zeros so leech.py doesn't crash on format string
+            return {
+                "width": 0, "height": 0, "size_bytes": 0, 
+                "duration": 0.0, "subtitles": [], "audio": []
+            }
 
     async def generate_screenshots(self, file_path: str, duration: float, count=3) -> list:
         """
@@ -99,8 +143,8 @@ class MediaProcessor:
         paths = []
         base_name = os.path.splitext(file_path)[0]
 
-        # Calculate timestamps: 20%, 50%, 80% marks
-        percentages = [0.20, 0.50, 0.80]
+        # Calculate timestamps (15%, 50%, 85%)
+        percentages = [0.15, 0.50, 0.85]
         
         # Limit to 3 max to save upload bandwidth
         if count != 3: percentages = [0.50]

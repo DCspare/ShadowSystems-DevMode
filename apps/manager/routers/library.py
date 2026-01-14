@@ -115,8 +115,11 @@ async def index_content(media_type: str, tmdb_id: int):
             "title": details.get("title") or details.get("name") or "Unknown Title",
             "clean_title": details.get("title") or details.get("name") or "Unknown Title",
             "year": (details.get("release_date") or details.get("first_air_date") or "0000")[:4],
+            "release_date": details.get("release_date") or details.get("first_air_date"), # Needed for Fallbacks
             "genres": [g["name"] for g in details.get("genres", [])],
-            "rating": details.get("vote_average", 0),
+            "vote_average": details.get("vote_average", 0), 
+            "rating": details.get("vote_average", 0), # Legacy alias
+            "overview": details.get("overview", "No synopsis available."),
             "status": "available",
             "visuals": {
                 "poster": f"https://image.tmdb.org/t/p/w500{details.get('poster_path')}" if details.get('poster_path') else None,

@@ -20,6 +20,8 @@ def sign_stream_link(file_id: str, client_ip: str) -> str:
     
     hash_obj = hashlib.md5(sign_string.encode('utf-8'))
     token = base64.urlsafe_b64encode(hash_obj.digest()).decode('utf-8').replace('=', '')
+
+    # return f"md5={token}&expires={expiry}" # Nginx standard args
     
     logger.info(f"Signed path {path} for IP {client_ip} [Hash snippet: {token[:5]}]")
     return f"token={token}&expires={expiry}"
