@@ -57,6 +57,7 @@ SHADOW-SYSTEMS (Root)
 | **FRANCHISE** | [`context_07_franchise_model.md`] | **SaaS Model**: Pricing, Tenants, Multi-domain logic. |
 | **REVENUE** | [`context_08_monetization_ads.md`] | Adsterra, VAST, GPlinks, PPD integration. |
 | **SURVIVAL** | [`context_09_growth_survival.md`] | **Defense**: Satellite Config, Bot Warmer, Matrix Log View. |
+| **MUSIC** | [`context_11_music_engine.md`] | Extension for Streaming Audio, OSTs, and Background Music. |
 | **READVAULT** | [`context_readvault.md`] | **Phase 1-Lite**: Manga architecture for HF Spaces. |
 
 ---
