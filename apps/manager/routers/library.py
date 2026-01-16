@@ -1,16 +1,18 @@
 # apps/manager/routers/library.py 
-import logging
-import base64
 import os
-from fastapi import APIRouter, HTTPException , Request
-from fastapi.responses import JSONResponse
-from services.metadata import metadata_service
-from services.database import db_service
-from services.bot_manager import bot_manager
-from core.utils import generate_short_id
-from core.security import sign_stream_link 
-from pyrogram.file_id import FileId # Used to decode the string identity
+import base64
+import logging
 from core.schemas import SignRequest
+from pyrogram.file_id import FileId # Used to decode the string identity
+from services.database import db_service
+from core.utils import generate_short_id
+from fastapi.responses import JSONResponse
+from core.security import sign_stream_link 
+from services.bot_manager import bot_manager
+from services.metadata import metadata_service
+from fastapi import APIRouter, HTTPException , Request
+from fastapi import Depends
+from core.security import sign_stream_link, RateLimiter
 
 logger = logging.getLogger("Library")
 # Router handles the /library prefix internally
@@ -140,7 +142,7 @@ async def index_content(media_type: str, tmdb_id: int):
         logger.error(f"Indexing error for TMDB {tmdb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/sign")
+@router.post("/sign", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def sign_video_url(payload: SignRequest, request: Request):
     """
     Lazy Signer: Generates Nginx Secure Link on demand.

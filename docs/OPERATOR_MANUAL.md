@@ -263,7 +263,7 @@ use browser and go to https://Domain/api/library/list
 Now manually hit the **Sign** endpoint using the data you just copied.
 
 **Command:**
-*(Replace `YOUR_SHORT_ID` and `YOUR_FILE_ID` with the real text you copied above)*
+*(Replace `YOUR_SHORT_ID` and `YOUR_FILE_ID/telegram_id` with the real text you copied above)*
 
 ```bash
 curl -X POST http://localhost:8080/api/library/sign \
