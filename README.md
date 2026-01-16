@@ -28,7 +28,9 @@ SHADOW-SYSTEMS (Root)
 │   ├── worker-video/        # High-Speed Video Swarm
 │       ├── handlers/        # Logic Pipelines
 │       │   ├── downloader.py # Hybrid Aria2 + Native HTTP Engine
-│       │   └── leech.py     # Identity Sanitization & Transfer Core
+│       │   ├── leech.py     # Identity Sanitization & Transfer Core
+│       │   ├── formatter.py # Aesthetic Telegram Caption Engine
+│       │   └── processor.py # FFmpeg Media & Screenshot Engine
 │       ├── Dockerfile       # Python 3.12 Media Image
 │       ├── requirements.txt # Version-pinned Media Libs
 │       └── worker.py        # Redis Task Watcher & Bot identity
@@ -73,6 +75,32 @@ SHADOW-SYSTEMS (Root)
 - **Metadata Upsert:** "Skeleton" logic creates database entries even if TMDB fails, preventing file loss.
 - **Database Indexing:** Search engine optimized with `title` and `author` Text Indexes.
 
+<details>
+    <summary><b>🔥 PART 3: Survival, Operations & B2B</b></summary>
+
+- [ ] **"Matrix" Log Streamer**
+  Live, color-coded terminal view of all 10 Worker containers streamed via WebSockets to the Admin Panel.
+  *Debugging tool to spot "FloodWait" or Leech errors without needing SSH access.*
+
+- [ ] **Visual "ShadowExplorer" (TeleDrive)**
+  File Manager UI to view, rename, and thumbnail-fix Telegram files directly from the web.
+  *Prevents the "Black Hole" problem of losing files in channels.*
+
+- [ ] **Satellite Connectivity**
+  App logic that fetches the API URL from a GitHub raw file if the main domain gets banned.
+  *Guarantees zero-downtime recovery for installed PWA users during domain migrations.*
+
+- [ ] **Bot Warmer Incubator**
+  Automated script that runs new Worker sessions through a "Human Behavior" pattern (reading/scrolling) for 48h before leeching.
+  *The #1 defense against Telegram's ban hammer for new accounts.*
+
+- [ ] **SaaS Franchise Engine (Multi-Tenant)**
+  Built-in middleware to support external domains (`client-site.com`) running off your infrastructure for a monthly fee.
+  *Turn the platform into a B2B product: You provide the Tech, they bring the Traffic.*
+</details>
+
+---
+
 ### 🏆 Landmark Achievements (v0.1.0-alpha)
 - **[THE GREAT BRIDGE]**: Successfully closed the full-stack loop. Admin `/leech` command -> Redis Queue -> Worker Download -> Telegram Upload -> MongoDB Indexing.
 - **[CONTEXT PIERCE]**: Overcame the "Group Context Blindness" hurdle by implementing a manual `/health` ping that force-caches peer hashes.
@@ -87,7 +115,13 @@ SHADOW-SYSTEMS (Root)
 - [x] Go-Stream-Engine: Ignition & Concurrency handling skeleton.
 - [x] **TARGET DESTROYED:** Go-MTProto Influx (Telegram Bridge & Streaming).
 - [x] **TARGET DESTROYED:** Nginx Secure Link & Slice Caching Validation.
-- [ ] Frontend Obsidian Glass Shell (Next.js) - **NEXT TARGET**
+
+### 💎 Achievements (v0.4.0-gamma) - Enrichment & Defense
+- [x] **Smart Series Buckets:** Logic to detect `SxxExx` via filename or Manual Hints (`/leech ... "Title S01E01"`) and route files into nested MongoDB Season arrays.
+- [x] **FFmpeg Intelligence:** Implemented `processor.py` to probe files for Subtitle languages/Audio Codecs, generate 3 screenshots, and cut 30s sample clips.
+- [x] **Aesthetic Logging:** Integrated `formatter.py` to produce clean, tree-styled Telegram captions with metadata pills.
+- [x] **Defense Level 1 & 3:** Implemented "Click-to-Sign" Lazy Links (`POST /sign`) and Redis Rate Limiting (5 req/min) to prevent scraping abuse.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -128,5 +162,5 @@ docker compose -f docker-compose.dev.yml down
 
 ---------
 
-*Last Updated: 2026-01-10*
-*Time: 05:00pm*
+*Last Updated: 2026-01-16*
+*Time: 05:12pm*

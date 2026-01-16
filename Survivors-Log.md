@@ -189,3 +189,18 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 *   **Problem:** Python Manager could find files, but Go Engine (using a different Bot Token) got `FILE_REFERENCE_EXPIRED` errors accessing them.
 *   **Description:** Telegram Access Hashes and File References are often scoped to the Session/User ID. Tokens cannot always be shared across different identities.
 *   **Fix:** **Identity Cloning**. Configured the Go Engine to ingest the **Pyrogram User Session String** from `.env`. This allows the Streamer to connect as the exact same "User" as the Leecher, guaranteeing 100% permission compatibility.
+
+#### 🧱 Hurdle #31: Python Scope Shadows
+*   **The Error:** `name 'video' is not defined` crash in Media Processor.
+*   **Description:** Variable definitions inside `try/except` blocks in Python are not scoped globally if the block fails early or loops don't trigger.
+*   **The Fix:** Refactored `processor.py` to initialize all default values (0, empty lists) *before* entering the try/logic block.
+
+#### 🧱 Hurdle #32: Pyrogram Album Captions
+*   **The Error:** Uploading screenshots as an Album caused the Caption to disappear.
+*   **Description:** Telegram Media Groups only display the caption attached to the *first* item in the array. If logic conditionally added items (like skipping sample video), the caption index was off.
+*   **The Fix:** Updated `leech.py` to force-attach the caption to `media_group[0]` immediately before sending, regardless of media type.
+
+#### 🧱 Hurdle #33: MongoDB Upsert Conflict
+*   **The Error:** `update only works with $ operators`.
+*   **Description:** Using `upsert=True` fails if the document skeleton definition is mixed inside the `$push` logic dynamically without strict separation.
+*   **The Fix:** Split the DB Write logic into strict branches: `find_one` -> If exists `update_one` ($push) -> Else `insert_one` (Full Skeleton).
