@@ -1,7 +1,28 @@
 version: "3.8"
 
 services:
-  # --- 1. THE GATEWAY (Handover Logic) ---
+  # --- 1. THE BRAIN (Manager API) ---
+  manager:
+    build: ./apps/manager
+    container_name: sv-manager-dev
+    restart: unless-stopped
+    environment: 
+       - DOMAIN_NAME=${CODESPACE_NAME}-80.app.github.dev # Keep this for IDX dynamic URL logic
+       # Do NOT list MODE here. Let it load from env_file below.
+    env_file: .env
+    volumes:
+      - ./apps/manager:/app
+      - ./data/sessions:/app/sessions
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
+    networks:
+      - sv-internal
+
+  # --- 2. THE GATEWAY (Handover Logic) ---
   gateway:
     build: ./apps/gateway
     container_name: sv-gateway-dev
@@ -23,7 +44,41 @@ services:
     networks:
       - sv-internal
 
-  # --- 2. THE ENGINE (The Muscle) ---
+  # --- 3. VIDEO WORKER (StreamVault Ingestion) ---
+  worker-video:
+    build: ./apps/worker-video
+    container_name: sv-worker-video-dev
+    environment:
+      - WORKER_ID=video_1
+      - SESSION_FILE=worker_video_1
+    env_file: .env
+    volumes:
+      - ./apps/worker-video:/app
+      - ./data/sessions:/app/sessions # Shared session mount
+    # depends_on:
+    #   - manager
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "10m"
+            max-file: "3"
+    networks:
+      - sv-internal
+
+  # --- 4. MANGA WORKER (ReadVault Librarian) ---
+  # worker-manga:
+  #   image: python:3.10-slim # Placeholder until we write code
+  #   container_name: sv-worker-manga-dev
+  #   command: ["tail", "-f", "/dev/null"]
+  #   logging:
+  #       driver: "json-file"
+  #       options:
+  #           max-size: "10m"
+  #           max-file: "3"
+  #   networks:
+  #     - sv-internal
+
+  # --- 5. THE ENGINE (The Muscle) ---
   stream-engine:
     build: ./apps/stream-engine
     container_name: sv-stream-engine-dev
@@ -46,59 +101,6 @@ services:
     networks:
       - sv-internal
 
-
-  # --- 3. THE BRAIN (Manager API) ---
-  manager:
-    build: ./apps/manager
-    container_name: sv-manager-dev
-    environment:
-      - MODE=DEV
-    env_file: .env
-    volumes:
-      - ./apps/manager:/app
-      - ./data/sessions:/app/sessions
-      - /var/run/docker.sock:/var/run/docker.sock
-    logging:
-        driver: "json-file"
-        options:
-            max-size: "10m"
-            max-file: "3"
-    networks:
-      - sv-internal
-
-  # --- 4. VIDEO WORKER (StreamVault Ingestion) ---
-  worker-video:
-    build: ./apps/worker-video
-    container_name: sv-worker-video-dev
-    environment:
-      - WORKER_ID=video_1
-      - SESSION_FILE=worker_video_1
-    env_file: .env
-    volumes:
-      - ./apps/worker-video:/app
-      - ./data/sessions:/app/sessions # Shared session mount
-    # depends_on:
-    #   - manager
-    logging:
-        driver: "json-file"
-        options:
-            max-size: "10m"
-            max-file: "3"
-    networks:
-      - sv-internal
-
-  # --- 5. MANGA WORKER (ReadVault Librarian) ---
-  # worker-manga:
-  #   image: python:3.10-slim # Placeholder until we write code
-  #   container_name: sv-worker-manga-dev
-  #   command: ["tail", "-f", "/dev/null"]
-  #   logging:
-  #       driver: "json-file"
-  #       options:
-  #           max-size: "10m"
-  #           max-file: "3"
-  #   networks:
-  #     - sv-internal
 
   # --- 6. THE FACE (Frontend Placeholder) ---
   # web:

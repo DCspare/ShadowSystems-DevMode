@@ -63,6 +63,39 @@ class MediaLeecher:
             
         return None
 
+    async def normalize_episode_mapping(self, tmdb_id: int, ptn_data: dict, media_type: str, raw_filename: str):
+        """
+        Translates File Numbering -> TMDB Numbering.
+        Specifically for Anime which uses Absolute numbers (Ep 1050)
+        while TMDB breaks them into Seasons (Season 21 Ep 12).
+        """
+        s_num = ptn_data.get('season')
+        e_num = ptn_data.get('episode')
+
+        # FALLBACK: If PTN fails but we see "S02" in text, force it
+        if s_num is None:
+            import re
+            # Regex to find Sxx or Season xx
+            s_match = re.search(r'(?i)S(\d{1,2})', raw_filename)
+            if s_match: s_num = int(s_match.group(1))
+
+        if e_num is None:
+             # Regex to find Exx or Episode xx
+            e_match = re.search(r'(?i)E(\d{1,3})', raw_filename)
+            if e_match: e_num = int(e_match.group(1))
+
+       # CASE A: Western
+        if media_type in ['tv', 'series']:
+            final_season = s_num if s_num is not None else 1
+            return final_season, e_num, {}
+
+            # CASE B: Anime
+        if media_type in ['anime', 'anime_movie']:
+            if s_num is not None: return s_num, e_num, {}
+            return 1, e_num, {}
+
+        return s_num, e_num, {}
+
     async def fetch_metadata_if_missing(self, content_id: int, file_name_hint: str = "", type_hint: str = "auto"):
         """
         Smart Auto-Indexer: 
@@ -358,79 +391,95 @@ class MediaLeecher:
             # 8. Database Indexing (Final Save)
             doc = video_msg.document
             decoded = FileId.decode(doc.file_id)
-
-            # Parse Episode Info from the (possibly renamed) file
-            ptn = PTN.parse(file_name)
-            s_num = ptn.get('season')
-            e_num = ptn.get('episode')
             
-            # --- STRUCTURE 1: The Raw File Data (Rich Metadata) ---
+            ptn = PTN.parse(file_name)
+            
+            # --- STRUCTURE 1: The Raw File Data (All Media Types) ---
             db_file_entry = {
-                "quality": ptn.get('quality', 'HD'),
+                "quality": ptn.get('quality', '720p'),
                 "telegram_id": doc.file_id, # Stores VIDEO id only
                 "location_id": main_msg_id, # Stores Message ID for Streaming headers
                 "file_size": doc.file_size,
                 "mime_type": doc.mime_type,
                 # Store detected season info here for flat filtering too
-                "meta": { "season": s_num, "episode": e_num } if s_num else {},
                 "tg_raw": {
                     "media_id": decoded.media_id,
                     "access_hash": decoded.access_hash,
                     "file_reference": decoded.file_reference.hex()
                 },
                 "subtitles": meta.get('subtitles', []),
-                "audio_tracks": meta.get('audio', []), # New Schema Field
+                "audio_tracks": meta.get('audio', []), # Maps from processor output
+                "embeds": [],    # Populated by separate "Daisy Chain" job later
+                "downloads": [], 
                 "added_at": int(time.time())
             }
 
-            # Update DB (Dynamic Strategy)
+            # Update Op Generator
+            existing_final = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
+
+            # 1. Update the Main File List
             update_ops = {
                 "$push": {"files": db_file_entry}, 
-                "$set": {"visuals.screenshots": screen_file_ids, "status": "available"}
-            }
-
-            # --- STRUCTURE 2: The Series Bucket (User Requirement) ---
-            # If we found S01E01, we ALSO push to seasons.1
-            if s_num is not None and e_num is not None:
-                ep_title = ep_meta.get('name') if ep_meta else f"Episode {e_num}"
-                
-                # A simplified object for the Season List (Frontend friendly)
-                episode_entry = {
-                    "episode": e_num,
-                    "title": ep_title,
-                    "overview": ep_meta.get('overview', ''),
-                    "still_path": ep_meta.get('still_path', None),
-                    "file_id": doc.file_id, # For streaming
-                    "quality": ptn.get('quality', '720p'),
-                    "file_index": -1 # Tip: Can verify length of files array - 1 if strict linking needed
+                "$set": {
+                    "visuals.screenshots": screen_file_ids, 
+                    "status": "available",
+                    # Refresh Date so it bubbles to top of 'Recently Added'
+                    "last_updated": int(time.time()) 
                 }
+            }
                 
-                # Push to seasons.1 (MongoDB creates the key '1' if missing)
-                update_ops["$push"][f"seasons.{s_num}"] = episode_entry
+            # --- STRUCTURE 2: The Seasonal Mapper (Logic Upgrade) ---
+            # Use the media_type from the DB (populated by auto-fetch)
+            current_media_type = existing_final.get('media_type', 'movie') if existing_final else "movie"
+            
+            s_num, e_num, _ = await self.normalize_episode_mapping(int(tmdb_id), ptn, current_media_type, file_name)
+            
+            # Only index as Series if we have valid Episode Data
+            if e_num is not None:
+                ep_obj = {
+                     "episode": e_num,
+                     "title": ep_meta.get('name', f"Episode {e_num}"),
+                     "overview": ep_meta.get('overview', ''),
+                     "still_path": ep_meta.get('still_path', None),
+                     "file_id": doc.file_id,
+                     "quality": ptn.get('quality', '720p'),
+                     # Useful for distinguishing "File X" from "File Y" in UI
+                     "unique_hash": decoded.media_id 
+                 }
+                 
+            # Key Point: Push to "seasons.1", "seasons.2", etc.
+            if e_num is not None:
 
-            # EXECUTE
-            existing_final = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
+                update_ops["$push"][f"seasons.{s_num}"] = ep_obj
+
+                # Safety: Set total_seasons count if this is a new high score
+                # This requires an aggregation pipeline technically, but simplistic:
+                # We update it to at least the current season
+                update_ops["$max"] = {"total_seasons": s_num}
+                
+               # EXECUTE WRITE
             if existing_final:
                 await self.db.library.update_one(
                     {"_id": existing_final["_id"]},
                     update_ops
                 )
             else:
-                # Skeleton Creator (includes empty seasons map)
+                # Skeleton
                 new_doc = {
                     "tmdb_id": int(tmdb_id),
                     "short_id": str(uuid.uuid4())[:7],
                     "title": os.path.basename(file_path),
-                    "media_type": "series" if s_num else "movie",
+                    "media_type": "series" if e_num else "movie",
+                    "status": "available",
+                    "visuals": { "screenshots": screen_file_ids },
                     "files": [db_file_entry],
+                    "total_seasons": s_num if s_num else 1,
                     "seasons": {}
                 }
-                if s_num:
-                     new_doc["seasons"] = { str(s_num): [episode_entry] }
-                     
+                if e_num: new_doc["seasons"] = { str(s_num): [ep_obj] }
                 await self.db.library.insert_one(new_doc)
             
-            logger.info(f"✅ Indexed Complete: {tmdb_id} (Series: {bool(s_num)})")
+            logger.info(f"✅ Index Complete | Series: {bool(e_num)} (S{s_num}E{e_num})")
             return True
 
         except Exception as e:

@@ -10,6 +10,7 @@ from services.bot_manager import bot_manager
 from core.utils import generate_short_id
 from core.security import sign_stream_link 
 from pyrogram.file_id import FileId # Used to decode the string identity
+from core.schemas import SignRequest
 
 logger = logging.getLogger("Library")
 # Router handles the /library prefix internally
@@ -79,10 +80,10 @@ async def get_by_slug(short_id: str, request: Request):
 
     client_ip = request.headers.get("x-real-ip", request.client.host)
 
-    if "files" in item:
-        for file in item["files"]:
-            sig = sign_stream_link(file["telegram_id"], client_ip)
-            file["stream_url"] = f"/stream/{file['telegram_id']}?{sig}"
+    # if "files" in item:
+    #     for file in item["files"]:
+    #         sig = sign_stream_link(file["telegram_id"], client_ip)
+    #         file["stream_url"] = f"/stream/{file['telegram_id']}?{sig}"
 
     item["_id"] = str(item["_id"])
     return item
@@ -138,6 +139,31 @@ async def index_content(media_type: str, tmdb_id: int):
     except Exception as e:
         logger.error(f"Indexing error for TMDB {tmdb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/sign")
+async def sign_video_url(payload: SignRequest, request: Request):
+    """
+    Lazy Signer: Generates Nginx Secure Link on demand.
+    Input: { "short_id": "v7K...", "file_id": "BQAC..." }
+    """
+    # 1. Validate File Existence
+    # Security: Ensure this file actually belongs to the content associated with short_id
+    item = await db_service.db.library.find_one(
+        { "short_id": payload.short_id, "files.telegram_id": payload.file_id }
+    )
+    if not item: raise HTTPException(404, "Invalid file for this content")
+
+    # 2. Capture Real IP
+    client_ip = request.headers.get("x-real-ip", request.client.host)
+    
+    # 3. Generate
+    sig = sign_stream_link(payload.file_id, client_ip)
+    
+    return {
+        "status": "signed",
+        "stream_url": f"/stream/{payload.file_id}?{sig}",
+        "expires_in": 14400 # 4 Hours
+    }
 
 @router.delete("/delete/{tmdb_id}")
 async def delete_content(tmdb_id: int):

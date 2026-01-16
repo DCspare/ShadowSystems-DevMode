@@ -238,3 +238,77 @@ EOF
 # 3. Run and Copy String to .env
 python3 gen_session.py
 ```
+
+---
+
+#### 7. To simulate exactly what the Frontend does: **Browse --> Select --> Sign**.
+
+### 🕵️ Step 1: Find valid IDs
+First, we need to grab a `short_id` and a `telegram_id` from your existing library to test with.
+
+Run this command in your terminal:
+```bash
+curl -s http://localhost:8080/api/library/list
+OR
+use browser and go to https://Domain/api/library/list
+```
+
+**Look at the output.** Find a movie and copy two things:
+1.  **`short_id`** (e.g., `abb276a`)
+2.  **`file_id`** (It is inside `files: [{ "file_id": "BQAC..." }]`)
+
+---
+
+### 🔐 Step 2: Request the Signed Link
+Now manually hit the **Sign** endpoint using the data you just copied.
+
+**Command:**
+*(Replace `YOUR_SHORT_ID` and `YOUR_FILE_ID` with the real text you copied above)*
+
+```bash
+curl -X POST http://localhost:8080/api/library/sign \
+  -H "Content-Type: application/json" \
+  -d '{
+    "short_id": "YOUR_SHORT_ID", 
+    "file_id": "YOUR_FILE_ID"
+  }'
+```
+
+### ✅ Expected Output
+You should see a JSON response like this:
+
+```json
+{
+  "status": "signed",
+  "stream_url": "/stream/BQAC...?token=...&expires=...",
+  "expires_in": 14400
+}
+```
+
+If you see `token=` and `expires=`, **Logic is Valid.** You successfully completely separated the data from the secure link.
+
+---
+
+### 🎬 Step 3: Test the Stream
+Take the **`stream_url`** path from the previous output and paste it into this URL in your **IDX Preview Browser** or simply execute:
+
+```bash
+curl -I "http://localhost:8080/stream/YOUR_FILE_ID?token=YOUR_TOKEN&expires=YOUR_TIMESTAMP"
+```
+### ✅ Expected Output
+You should see a JSON response like this:
+
+```json
+HTTP/1.1 200 OK
+Server: nginx/1.29.4
+Date: Fri, 16 Jan 2026 08:42:23 GMT
+Content-Type: video/mp4
+Content-Length: 43780763
+Connection: keep-alive
+Accept-Ranges: bytes
+Content-Range: bytes 0-43780762/43780763
+```
+
+*   **HTTP 200/206:** Success. The key is valid.
+*   **HTTP 403 Forbidden:** The IP signing failed (or Nginx didn't like the hash).
+    *   *Dev Note:* If you generate the link via **Terminal Curl** but try to play it in **Chrome Browser**, it **might** fail if Nginx detects an IP mismatch (Terminal Container IP vs Browser Tunnel IP). This is a good security feature! To test visual playback, try making the API request directly in the browser address bar for `view`, manually constructing a mock post is hard, so relies on the `curl -I` status code for now.

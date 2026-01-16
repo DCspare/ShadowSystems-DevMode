@@ -116,21 +116,24 @@ class MessageFormatter:
 
         if meta.get('is_10bit'): res_str += " (10bit)"
 
-        # 5. Audio Formatting
-        # Goal: "AAC 2.0 (Japanese, English)"
+        # 5. Audio Formatting (AAC 2.0 (Japanese, English))
+        # Expected Schema: [{'codec': 'aac', 'channels': 5.1, 'lang': 'eng', 'code': 'eng'}]
+        # Processor returns 'lang' as the full name, leech adds 'code' if parsed
         audio_text = "Unknown"
-        if meta.get('audio'):
+        audio_list = meta.get('audio') or meta.get('audio_tracks') # Handle both names
+        
+        if audio_list:
             # Group codecs and languages
-            first_codec = meta['audio'][0].get('codec', 'aac').upper()
-            chan = meta['audio'][0].get('channels', 2.0)
+            first_codec = audio_list[0].get('codec', 'aac').upper()
+            chan = float(audio_list[0].get('channels', 2.0))
             chan_str = f"{int(chan)}.1" if chan % 1 != 0 else f"{int(chan)}.0"
             
             # Lang list
             langs = []
-            for t in meta['audio']:
-                l = t.get('code', 'unk')
-                readable = self.LANG_MAP.get(l, l.title())
-                if readable not in langs: langs.append(readable)
+            for t in audio_list:
+                # Prefer short code if available (e.g. 'eng'), else full 'English'
+                l = t.get('code', t.get('lang', 'unk'))[:3].upper()
+                if l not in langs: langs.append(l)
             
             audio_text = f"{first_codec} {chan_str} ({', '.join(langs)})"
 
@@ -160,7 +163,7 @@ class MessageFormatter:
 **NAME:** `📁 {title} [{year}]`
 {f"**{episode_line}**" if episode_line else ""}
 
-┌ 💿 **Res:** `{res_str}`
+┌ 💿 **Res:** #`{res_str}`
 ├ 🔊 **Audio:** `{audio_text}`
 ├ 📝 **Subtitles:** `{sub_text}`
 ├ 💾 **Size:** `{self.human_size(meta.get('size_bytes', 0))}`

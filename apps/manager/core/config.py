@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Security
     JWT_SECRET: str
     SECURE_LINK_SECRET: str
+    API_SECRET_KEY: str = "dev_unsafe_key"
 
     model_config = SettingsConfigDict(
         # Point to the root .env file relative to apps/manager/

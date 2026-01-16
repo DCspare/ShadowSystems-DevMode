@@ -62,6 +62,11 @@ class FileData(BaseModel):
     downloads: List[BackupLink] = []    # Gofile, PixelDrain (Archive Page)
     added_at: int = Field(default_factory=lambda: int(datetime.utcnow().timestamp())) # (Unix Timestamp) for sorting performance
 
+class SignRequest(BaseModel):
+    short_id: str   # The Movie Page
+    file_id: str    # The Specific Video File the user wants
+    # Optional: guest_token or captcha_token for future rate-limiting
+
 # --- CONTENT SUB-SCHEMAS (Series/Manga Logic) ---
 
 class SeasonPack(BaseModel):
