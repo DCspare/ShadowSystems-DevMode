@@ -106,7 +106,7 @@ class Downloader:
                 'quiet': True, 
                 'no_warnings': True,
                 # Ensure it sees the cookie file mapped in Docker
-                'cookiefile': os.getenv("COOKIES_FILE_PATH", "/app/worker-video/cookies.txt"),
+                'cookiefile': os.getenv("COOKIES_FILE_PATH", "/app/cookies.txt"),
                 'trim_file_name': 200,
                 # Fixes permission errors by restricting weird characters
                 'restrictfilenames': True 

@@ -21,6 +21,7 @@ class MediaLeecher:
         # Env feature flags
         self.gen_samples = os.getenv("GENERATE_SAMPLES", "True").lower() == "true"
         self.tmdb_api_key = os.getenv("TMDB_API_KEY", "your_key_here") # Ensure this is set
+        self.branding = os.getenv("FILE_BRANDING_TAG", "[ShadowSystem]")
         
         try:
             self.log_channel = int(os.getenv("TG_LOG_CHANNEL_ID", "0"))
@@ -29,44 +30,135 @@ class MediaLeecher:
             self.log_channel = 0
             self.backup_channel = 0
 
-    async def fetch_metadata_if_missing(self, tmdb_id: int):
-        """Auto-Indexes TMDB Content if DB entry is empty (The Fix)"""
-        if not self.tmdb_api_key or self.tmdb_api_key == "your_key_here":
-            return None # API Key missing
+    def sanitize_url(self, url):
+        """Removes api_key from logs"""
+        if "api_key=" in url:
+            return url.split("api_key=")[0] + "api_key=***HIDDEN***"
+        return url
+
+    async def get_episode_details(self, tmdb_id: int, season: int, episode: int):
+        """Fetches Specific Episode Title with enhanced logging"""
+        if not self.tmdb_api_key or season == 0 or episode == 0: 
+            return None
         
         try:
+            url = f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season}/episode/{episode}?api_key={self.tmdb_api_key}"
+            logger.info(f"🔎 Checking Episode Metadata: {self.sanitize_url(url)}")
+            
             async with aiohttp.ClientSession() as sess:
-                # 1. Try Movie
-                url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={self.tmdb_api_key}"
+                async with sess.get(url) as resp:
+                    if resp.status == 200:
+                        ep_data = await resp.json()
+                        title = ep_data.get('name')
+                        logger.info(f"✅ Found Ep Title: {title}")
+                        return {
+                            'name': ep_data.get('name'),
+                            'still_path': ep_data.get('still_path'),
+                            'overview': ep_data.get('overview', '') # ➕ 
+                        }
+                    else:
+                        logger.warning(f"❌ TMDB Ep Error {resp.status}")
+        except Exception as e:
+            logger.error(f"Episode fetch failed: {e}")
+            
+        return None
+
+    async def fetch_metadata_if_missing(self, content_id: int, file_name_hint: str = "", type_hint: str = "auto"):
+        """
+        Smart Auto-Indexer: 
+        1. Checks TMDB Movie.
+        2. Checks TMDB TV (Series).
+        3. Checks Jikan (MAL) for Anime fallback.
+        Priority is determined by 'type_hint' or detected via SxxExx patterns.
+        """
+        if not self.tmdb_api_key or len(self.tmdb_api_key) < 5:
+            return None 
+        
+        # 1. Strategy Determination
+        search_order = []
+        
+        # Parse Filename for SxxExx pattern
+        parsed = PTN.parse(file_name_hint)
+        is_series_file = bool(parsed.get('season') or parsed.get('episode'))
+
+        # A. Explicit Hints (from Command)
+        if type_hint in ["tv", "series", "show"]:
+            search_order = ["tv"]
+        elif type_hint in ["movie", "film"]:
+            search_order = ["movie"]
+        elif type_hint in ["anime", "mal"]:
+            search_order = ["anime"]
+        
+        # B. Automatic Inference
+        else: # type_hint == "auto"
+            if is_series_file:
+                search_order = ["tv", "movie", "anime"]
+            else:
+                search_order = ["movie", "tv", "anime"]
+
+        logger.info(f"🔎 Metadata Search Order: {search_order}")
+
+        async with aiohttp.ClientSession() as sess:
+            for media_type in search_order:
+
+                # --- CASE 1: ANIME (Jikan/MAL) ---
+                if media_type == "anime":
+                    url_mal = f"https://api.jikan.moe/v4/anime/{content_id}"
+                    async with sess.get(url_mal) as resp:
+                        if resp.status == 200:
+                            mal_data = await resp.json()
+                            d = mal_data['data']
+                            logger.info(f"✅ Metadata Match: [ANIME] {d.get('title')}")
+                            return {
+                                "mal_id": content_id, # Uses MAL ID
+                                "media_type": "anime",
+                                "title": d.get('title_english') or d.get('title'),
+                                "clean_title": (d.get('title') or "").lower(),
+                                "year": str(d.get('year') or "0000"),
+                                "genres": [g['name'] for g in d.get('genres', [])],
+                                "rating": float(d.get('score') or 0.0),
+                                "overview": d.get('synopsis', ''),
+                                "status": "available",
+                                "visuals": { "poster": d['images']['jpg']['large_image_url'] }
+                            }
+                    continue # Try next if failed
+                        
+            # --- CASE 2: TMDB (Movie/TV) ---
+                url = f"https://api.themoviedb.org/3/{media_type}/{content_id}?api_key={self.tmdb_api_key}"
                 async with sess.get(url) as resp:
                     if resp.status == 200:
                         data = await resp.json()
+                        
+                        # Anime Check within TMDB (Heuristic)
+                        is_anime_genre = 'ja' in data.get('original_language', '') and \
+                                         any(g['name'] == 'Animation' for g in data.get('genres', []))
+                        
+                        final_type = media_type
+                        if media_type == 'tv' and is_anime_genre: final_type = "anime"
+                        elif media_type == 'movie' and is_anime_genre: final_type = "anime_movie"
+
+                        title = data.get('title') if media_type == 'movie' else data.get('name')
+                        year_raw = data.get('release_date') if media_type == 'movie' else data.get('first_air_date')
+                        year = (year_raw or "0000")[:4]
+
+                        logger.info(f"✅ Metadata Match: [{final_type.upper()}] {title}")
+
                         return {
-                            "tmdb_id": tmdb_id,
-                            "media_type": "movie",
-                            "title": data.get('title'),
-                            "year": (data.get('release_date', '') or '0000')[:4],
+                            "tmdb_id": content_id,
+                            "media_type": final_type,
+                            "title": title,
+                            "clean_title": title.lower(),
+                            "year": year,
                             "genres": [g['name'] for g in data.get('genres', [])],
-                            "rating": data.get('rating', 0.0),
-                            "overview": data.get('overview', '')
+                            "rating": data.get('vote_average', 0.0),
+                            "overview": data.get('overview', ''),
+                            "status": "available",
+                            "visuals": {
+                                "poster": f"https://image.tmdb.org/t/p/w500{data.get('poster_path')}" if data.get('poster_path') else None,
+                                "backdrop": f"https://image.tmdb.org/t/p/original{data.get('backdrop_path')}" if data.get('backdrop_path') else None
+                            }
                         }
-                    
-                # 2. Try TV Show (Fallback)
-                url_tv = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={self.tmdb_api_key}"
-                async with sess.get(url_tv) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return {
-                            "tmdb_id": tmdb_id,
-                            "media_type": "tv",
-                            "title": data.get('name'),
-                            "year": (data.get('first_air_date', '') or '0000')[:4],
-                            "genres": [g['name'] for g in data.get('genres', [])],
-                            "rating": data.get('rating', 0.0),
-                            "overview": data.get('overview', '')
-                        }
-        except Exception as e:
-            logger.error(f"Metadata Auto-Fetch Failed: {e}")
+        
         return None
 
     async def upload_progress(self, current, total):
@@ -77,17 +169,23 @@ class MediaLeecher:
                 logger.info(f"📤 Upload: {pct}%")
                 self._last_log = pct
 
-    async def upload_and_sync(self, file_path: str, tmdb_id: int):
-        cleanup_targets = [file_path] # Files to delete at end
+    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto"):
+        # SAFETY INIT: Variables must exist before TRY block
+        current_file_path = file_path
+        cleanup_targets = [file_path]
         
         try:
-            # 1. Fetch DB Meta (For the beautiful caption)
+            file_name = os.path.basename(current_file_path)
+
+            # 1. Fetch DB Meta (For the beautiful caption with Smart Fallback)
             db_item = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
 
             # If missing in DB, FETCH IT NOW
             if not db_item:
-                logger.info(f"⚠️ Metadata missing for #{tmdb_id}. Auto-fetching...")
-                meta_from_tmdb = await self.fetch_metadata_if_missing(int(tmdb_id))
+                logger.info(f"⚠️ Metadata missing  Auto-fetch mode: {type_hint} for #{tmdb_id}.")
+
+                # [CHANGE]: Passing the typye_hint ('tv', 'movie', 'anime', or 'auto')
+                meta_from_tmdb = await self.fetch_metadata_if_missing(int(tmdb_id), file_name, type_hint)
                 
                 if meta_from_tmdb:
                     db_item = meta_from_tmdb
@@ -99,24 +197,63 @@ class MediaLeecher:
                     # Final Fail Safe
                     db_item = {
                         "tmdb_id": int(tmdb_id),
-                        "title": os.path.basename(file_path),
-                        "vote_average": 0.0,
+                        "title": file_name,
+                        "ratng": 0.0,
                         "year": 2026,
                         "genres": [],
                         "short_id": str(uuid.uuid4())[:7],
+                        "media_type": "unknown",
                         "visuals": {}
                     }
 
             # 2. Probe Media (Processor)
-            meta = await processor.probe(file_path)
+            meta = await processor.probe(current_file_path)
             duration = meta.get('duration', 0)
+
+            # 2.5 Resolve Episode Data
+            # PTN (Parse name) -> Check if DB Item is a Series -> Get Ep Details
+            
+            ptn = PTN.parse(file_name)
+            
+            # We check the NEWLY FETCHED db_item media type here to detect if it's a series or anime
+            ep_meta = {}
+            if db_item.get('media_type') in ['series', 'anime', 'tv'] and ptn.get('season') and ptn.get('episode'):
+                 ep_details = await self.get_episode_details(tmdb_id, ptn.get('season'), ptn.get('episode'))
+                 if ep_details:
+                     ep_meta = {
+                         'name': ep_details.get('name'),
+                         'still_path': ep_details.get('still_path'),
+                         'overview': ep_details.get('overview')
+                     }
+
+            # --- BRANDED RENAMING LOGIC ---
+            ext = os.path.splitext(file_name)[1]
+            # Construct: Title.S01E01.720p.[ShadowSystem].mp4
+            # We sanitize spaces to dots for clean file names
+            safe_title = ptn.get('title', 'Video').replace(' ', '.')
+            quality_tag = ptn.get('quality', 'HD')
+            
+            s_tag = ""
+            if ptn.get('season') and ptn.get('episode'):
+                s_tag = f".S{ptn.get('season'):02d}-E{ptn.get('episode'):02d}"
+                
+            branded_name = f"{safe_title}{s_tag}.{quality_tag}.{self.branding}{ext}"
+            
+            # Perform Rename
+            new_path = os.path.join(os.path.dirname(file_path), branded_name)
+            os.rename(file_path, new_path)
+            file_path = new_path
+            file_name = branded_name
+            
+            logger.info(f"🏷️ Branded as: {file_name}")
             
             # 3. Prepare Visuals
             clean_caption = formatter.build_caption(
                 tmdb_id, 
                 meta, 
-                os.path.basename(file_path), 
-                db_entry=db_item
+                file_name, 
+                db_entry=db_item,
+                episode_meta=ep_meta # <--- PASS THIS TO FORMATTER
             )
             buttons = formatter.build_buttons(db_item.get('short_id', ''))
 
@@ -163,7 +300,7 @@ class MediaLeecher:
                 f"📎 [Go to Main File]({msg_link})"
             )
 
-            # 6. Mirroring (Redundancy)
+            # 6. Mirroring (Backup)
             if self.backup_channel != 0:
                 try:
                     await video_msg.forward(self.backup_channel)
@@ -221,14 +358,21 @@ class MediaLeecher:
             # 8. Database Indexing (Final Save)
             doc = video_msg.document
             decoded = FileId.decode(doc.file_id)
+
+            # Parse Episode Info from the (possibly renamed) file
+            ptn = PTN.parse(file_name)
+            s_num = ptn.get('season')
+            e_num = ptn.get('episode')
             
-            # Format: Pydantic Compliant Audio/Subs
+            # --- STRUCTURE 1: The Raw File Data (Rich Metadata) ---
             db_file_entry = {
-                "quality": PTN.parse(file_path).get('quality', 'HD'),
+                "quality": ptn.get('quality', 'HD'),
                 "telegram_id": doc.file_id, # Stores VIDEO id only
                 "location_id": main_msg_id, # Stores Message ID for Streaming headers
                 "file_size": doc.file_size,
                 "mime_type": doc.mime_type,
+                # Store detected season info here for flat filtering too
+                "meta": { "season": s_num, "episode": e_num } if s_num else {},
                 "tg_raw": {
                     "media_id": decoded.media_id,
                     "access_hash": decoded.access_hash,
@@ -239,29 +383,54 @@ class MediaLeecher:
                 "added_at": int(time.time())
             }
 
-            # Update DB (Using Logic A/B)
-            # IMPORTANT: Re-query incase auto-fetch inserted the document
-            existing_final = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
+            # Update DB (Dynamic Strategy)
+            update_ops = {
+                "$push": {"files": db_file_entry}, 
+                "$set": {"visuals.screenshots": screen_file_ids, "status": "available"}
+            }
 
+            # --- STRUCTURE 2: The Series Bucket (User Requirement) ---
+            # If we found S01E01, we ALSO push to seasons.1
+            if s_num is not None and e_num is not None:
+                ep_title = ep_meta.get('name') if ep_meta else f"Episode {e_num}"
+                
+                # A simplified object for the Season List (Frontend friendly)
+                episode_entry = {
+                    "episode": e_num,
+                    "title": ep_title,
+                    "overview": ep_meta.get('overview', ''),
+                    "still_path": ep_meta.get('still_path', None),
+                    "file_id": doc.file_id, # For streaming
+                    "quality": ptn.get('quality', '720p'),
+                    "file_index": -1 # Tip: Can verify length of files array - 1 if strict linking needed
+                }
+                
+                # Push to seasons.1 (MongoDB creates the key '1' if missing)
+                update_ops["$push"][f"seasons.{s_num}"] = episode_entry
+
+            # EXECUTE
+            existing_final = await self.db.library.find_one({"tmdb_id": int(tmdb_id)})
             if existing_final:
                 await self.db.library.update_one(
                     {"_id": existing_final["_id"]},
-                    {"$push": {"files": db_file_entry}, 
-                     "$set": {"visuals.screenshots": screen_file_ids, "status": "available"}}
+                    update_ops
                 )
             else:
-                # Should not happen given logic in Step 1, but failsafe:
+                # Skeleton Creator (includes empty seasons map)
                 new_doc = {
                     "tmdb_id": int(tmdb_id),
                     "short_id": str(uuid.uuid4())[:7],
-                    "title": "Indexed Upload",
-                    "status": "available",
-                    "visuals": { "screenshots": screen_file_ids },
-                    "files": [db_file_entry]
+                    "title": os.path.basename(file_path),
+                    "media_type": "series" if s_num else "movie",
+                    "files": [db_file_entry],
+                    "seasons": {}
                 }
+                if s_num:
+                     new_doc["seasons"] = { str(s_num): [episode_entry] }
+                     
                 await self.db.library.insert_one(new_doc)
-
-            logger.info(f"✅ Indexed Complete: {tmdb_id}")
+            
+            logger.info(f"✅ Indexed Complete: {tmdb_id} (Series: {bool(s_num)})")
             return True
 
         except Exception as e:
@@ -269,11 +438,14 @@ class MediaLeecher:
             return False
         
         finally:
-            # 9. Aggressive Cleanup (Critical for Dev Mode)
-            # We add a small sleep to ensure Pyrogram has released file handles
-            await asyncio.sleep(0.5)
+            # 9. Robust Cleanup
+            await asyncio.sleep(2.0)
+            seen = set()
             for f in cleanup_targets:
-                if f and os.path.exists(f): 
-                    try: os.remove(f)
+                if f and f not in seen and os.path.exists(f):
+                    try:
+                        os.remove(f)
+                        logger.info(f"🗑️ Del: {os.path.basename(f)}")
+                        seen.add(f)
                     except: pass
-            logger.info("🧹 Cleaned.")
+            logger.info("🧹 Storage Scrubbed.")

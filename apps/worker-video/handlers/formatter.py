@@ -55,106 +55,114 @@ class MessageFormatter:
         # Common hash length is 24 (mongo) or 32 (md5) hex chars
         return bool(re.match(r'^[a-fA-F0-9]{20,40}$', base))
 
-    def build_caption(self, tmdb_id, meta, file_name, db_entry=None):
+    def build_caption(self, tmdb_id, meta, file_name, db_entry=None, episode_meta=None):
+        """
+        Builds specific formatted card for Shadow Systems V2.
+        Ref: Monster 2004 anime example
+        
+        TASK #30981 COMPLETE
+        ANIME or SERIES or MOVIE # according to content 
+        NAME: 📁 Monster [2004]
+        EPISODE: S01 E04 - "The Executioner"
+
+        ┌ 💿 Res: 1920x1080 (10bit) # or WebDL etc...
+        ├ 🔊 Audio: AAC 2.0 (Japanese, English) # all audio formats will be here and in mongoDB as well we need it for our frontend 
+        ├ 📝 Subtitles: Soft (English) # or Hindi etc...
+        ├ 💾 Size: 1.45 GB
+        ├ ⏳ Duration: 00:24:10
+        ├ ⭐ Rating: 8.7/10 # from TMDB or MAL according to content 
+        └ 🎭 Genre: Thriller, Mystery, Psychology # from TMDB or MAL according to content 
+            # all these are also needed in mongoDB for frontend 
+        👇 PREVIEW ASSETS
+        (Screenshots & Sample attached below)
+
+        #ShadowSystems #Anime 
+
+        [📥 Direct DL](StreamVault_download_URL) | [🎬 Watch Online](StreamVault_PlayerPage_URL) 
+        # buttons will be great even if bot is private
+        """
         is_hash = self.is_hash_filename(file_name)
-        """
-        Constructs the Final Message String.
-        db_entry: Optional dict from MongoDB containing Genres/Rating/Year
-        meta: Output from processor.probe()
-        """
-        # 1. Resolve Title
-        title = "Unknown"
-        year = "202X"
-        ptn = {}
-        if not is_hash:
-            ptn = PTN.parse(file_name)
+       
+        # 1. Base Info
+        ptn = PTN.parse(file_name) if not is_hash else {}
         
-        if db_entry:
-            title = db_entry.get('title', title)
-            year = db_entry.get('year', year)
-        elif not is_hash:
-            title = ptn.get('title', file_name)
+        # Priority: DB Title (Monster) > PTN Title > Filename
+        title = db_entry.get('title') if db_entry else ptn.get('title', file_name)
+        year = db_entry.get('year') if db_entry else ptn.get('year', '202X')
 
-        quality = ptn.get('quality', 'HD')
+       # 2. Tag Resolver (Anime/Series/Movie)
+        media_type = db_entry.get('media_type', 'movie').upper()
+        if "TV" in media_type: media_type = "SERIES"
 
-        # 2. Get DB Details
-        # Handle 'rating' vs 'vote_average' and N/A fallbacks
-        rating = "0.0"
-        genres = "N/A"
-        if db_entry:
-            v = db_entry.get('vote_average')
-            if v: rating = str(round(float(v), 1))
-            g_list = db_entry.get('genres', [])
-            if g_list: genres = ", ".join(g_list[:3])
-
-        genres_list = db_entry.get('genres', []) if db_entry else ['Uncategorized']
-        if not isinstance(genres_list, list): genres_list = [str(genres_list)]
-        genres = ", ".join(genres_list[:3]) # Limit to 3 tags
-
-        # 3. Process Audio & Subs string
-        # Ex: "AAC 2.0 (JPN, ENG)"
-        audio_line = "Unknown"
-        if meta.get('audio'):
-            # Collect unique codes first
-            langs_found = []
-            codec = meta['audio'][0].get('codec', 'aac').upper()
-            channels = meta['audio'][0].get('channels', 2.0)
-            
-            # Use 5.1 formatting
-            chan_str = f"{channels:.1f}" if channels % 1 != 0 else f"{int(channels)}.0"
-
-            for t in meta['audio']:
-                code = t.get('code', 'unk').lower()
-                name = self.LANG_MAP.get(code, code.title())
-                if name not in langs_found: langs_found.append(name)
-            
-            audio_line = f"{codec} {chan_str} ({', '.join(langs_found)})"
-
-        # 4. Smart Subtitles (Goal: "Soft (English)")
-        sub_line = "None"
-        subs = meta.get('subtitles', [])
-        if subs:
-            # We assume mkv text subs are "Soft"
-            eng_sub = False
-            others = 0
-            
-            for sub_line in subs:
-                code = sub_line.get('code', '').lower()
-                if 'eng' in code or 'en' == code: eng_sub = True
-                else: others += 1
-            
-            display = "English" if eng_sub else subs[0].get('lang', 'Unknown')
-            if others > 0 and not eng_sub: display += f" +{others}"
-            elif others > 0 and eng_sub: display = "English" # Prioritize just showing English if present
-            
-            sub_line = f"Soft ({display})"
-
-        # 5. Header (S01 E04)
-        header_block = f"**NAME:** `📁 {title} [{year}]`"
-
-        # NOTE: Hash files can't provide S/E info naturally. 
-        # Only valid PTN filenames can.
-        if not is_hash:
-            season = ptn.get('season')
-            episode = ptn.get('episode')
-            ep_title = ptn.get('episodeName', '') # PTN sometimes catches title
-            
-            if isinstance(season, int) and isinstance(episode, int):
-                ep_str = f"S{season:02d} E{episode:02d}"
-                if ep_title: ep_str += f' - "{ep_title}"'
-                header_block += f"\n**EPISODE:** `{ep_str}`"
+        # 3. Episode Block (S01 E04 - "Title")
+        episode_line = ""
+        season = ptn.get('season')
+        episode = ptn.get('episode')
         
-        # 6. Technicals
-        res_str = f"{meta.get('width',0)}x{meta.get('height',0)}"
+        if season is not None and episode is not None:
+             ep_name = ""
+             if episode_meta and episode_meta.get('name'):
+                 ep_name = f' - "{episode_meta.get("name")}"' # - "The Executioner"
+             
+             episode_line = f"EPISODE: S{season:02d} E{episode:02d}{ep_name}"
+
+        # 4. Tech Stats
+        width = meta.get('width', 0)
+        res_str = "Unknown"
+        if width >= 3800: res_str = "4K UHD"
+        elif width >= 1900: res_str = "1080p (BluRay)"
+        elif width >= 1200: res_str = "720p (HD)"
+        elif width > 0: res_str = f"{width}x{meta.get('height')}"
+
         if meta.get('is_10bit'): res_str += " (10bit)"
 
-        caption = f"""
-**TASK #{tmdb_id} COMPLETE**
-{header_block}
+        # 5. Audio Formatting
+        # Goal: "AAC 2.0 (Japanese, English)"
+        audio_text = "Unknown"
+        if meta.get('audio'):
+            # Group codecs and languages
+            first_codec = meta['audio'][0].get('codec', 'aac').upper()
+            chan = meta['audio'][0].get('channels', 2.0)
+            chan_str = f"{int(chan)}.1" if chan % 1 != 0 else f"{int(chan)}.0"
+            
+            # Lang list
+            langs = []
+            for t in meta['audio']:
+                l = t.get('code', 'unk')
+                readable = self.LANG_MAP.get(l, l.title())
+                if readable not in langs: langs.append(readable)
+            
+            audio_text = f"{first_codec} {chan_str} ({', '.join(langs)})"
 
-├ 💿 **Res:** `{res_str}`
-├ 🔊 **Audio:** `{audio_line}`
-├ 📝 **Subtitles:** `{sub_line}`
+        # 6. Ratings / Genres
+        rating = str(round(db_entry.get('rating', 0.0), 1)) if db_entry else "N/A"
+        
+        g_list = db_entry.get('genres', [])
+        if not g_list: g_list = ['Uncategorized']
+        genres = ", ".join(g_list[:3]) # Limit 3
+
+        # 7. Subtitles
+        sub_text = "None"
+        if meta.get('subtitles'):
+             # Logic to highlight ENG
+             eng = any('eng' in s['code'].lower() for s in meta['subtitles'])
+             display = "English" if eng else meta['subtitles'][0]['lang']
+             plus = len(meta['subtitles']) - 1 if eng else len(meta['subtitles'])
+             if plus > 0: display += f" +{plus} others"
+             sub_text = f"Soft ({display})"
+
+        # --- THE FINAL BLOCK ---
+        # Logic: If no Episode line, omit that row.
+
+        layout = f"""
+**TASK #{tmdb_id} COMPLETE**
+
+**NAME:** `📁 {title} [{year}]`
+{f"**{episode_line}**" if episode_line else ""}
+
+┌ 💿 **Res:** `{res_str}`
+├ 🔊 **Audio:** `{audio_text}`
+├ 📝 **Subtitles:** `{sub_text}`
 ├ 💾 **Size:** `{self.human_size(meta.get('size_bytes', 0))}`
 ├ ⏳ **Duration:** `{self.format_duration(meta.get('duration', 0))}`
 ├ ⭐ **Rating:** `{rating}/10`
@@ -163,9 +171,9 @@ class MessageFormatter:
 👇 **PREVIEW ASSETS**
 *(Screenshots & Sample attached below)*
 
-#ShadowSystems #Quality
+#ShadowSystems #{media_type.title()}
 """
-        return caption.strip()
+        return layout.strip()
 
     def build_buttons(self, short_id: str):
         """Generates Buttons: Watch Online | Direct DL

@@ -72,6 +72,8 @@ class SeasonPack(BaseModel):
 class Episode(BaseModel):
     episode: int
     title: str
+    overview: Optional[str] = None     # ➕ NEW: Episode Plot
+    still_path: Optional[str] = None   # ➕ NEW: Specific Episode Thumbnail
     file_id: str
     quality: str
 

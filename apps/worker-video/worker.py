@@ -178,21 +178,48 @@ class VideoWorker:
                     payload = task[1]
                     logger.info(f"Consumed task: {payload}")
                     try:
-                        tmdb_id, raw_url = payload.split("|")
-                        # CHANGED: We get a rich object now
+                        # 🔁 FLEXIBLE SPLIT (Supports 3 or 4 args)
+                        parts = payload.split("|")
+                        tmdb_id = parts[0]
+                        raw_url = parts[1]
+                        type_hint = parts[2] if len(parts) > 2 else "auto"
+                        name_hint = parts[3] if len(parts) > 3 else ""
+
+                        # 1. Download
                         target_info = downloader.get_direct_url(raw_url)
-                        # CHANGED: We pass the whole object so it knows name/type
                         local_path = await downloader.start_download(target_info)
                         
-                        # Validate and rename slightly if needed by Clean function...
                         if local_path and os.path.exists(local_path):
-                            await self.leecher.upload_and_sync(local_path, int(tmdb_id))
-                            os.remove(local_path)
+                            
+                            # 🔄 RENAME LOGIC (The Fix for PTN)
+                            if name_hint:
+                                dir_name = os.path.dirname(local_path)
+                                ext = os.path.splitext(local_path)[1]
+                                new_filename = f"{name_hint}{ext}"
+                                new_path = os.path.join(dir_name, new_filename)
+                                
+                                logger.info(f"✏️ Renaming: {os.path.basename(local_path)} -> {new_filename}")
+                                os.rename(local_path, new_path)
+                                local_path = new_path
+
+                            # 2. Upload with Hint
+                            await self.leecher.upload_and_sync(
+                                local_path, 
+                                int(tmdb_id),
+                                type_hint=type_hint
+                            )
+
+                            # 3. Clean
+                            if os.path.isfile(local_path):
+                                os.remove(local_path)
                             logger.info(f"🗑️ Cleaned up: {local_path}")
                         else:
                             logger.error("Download ghosted.")
+
                     except Exception as e:
                         logger.error(f"Task Payload Error: {e}")
+                        await asyncio.sleep(2)
+
             except Exception as e:
                 logger.error(f"Loop Error: {e}")
                 await asyncio.sleep(2)

@@ -1,3 +1,4 @@
+# manager/handlers/leech.py 
 import os
 import logging
 from pyrogram import Client, filters, enums
@@ -11,30 +12,55 @@ OWNER_ID = int(os.getenv("TG_OWNER_ID", 0))
 @Client.on_message(filters.command(["leech", "mirror"]) & filters.user(OWNER_ID))
 async def leech_command(client, message):
     try:
-        # Format: /leech LINK TMDB_ID
-        parts = message.command
+        # Advanced Parsing to support quotes: 
+        # /leech http... 123 tv "The Night Manager S01E01"
+        text = message.text
         
-        if len(parts) < 2:
-            await message.reply_text(
-                "❌ **Syntax Error**\n\nUsage: \nExample: "
-            )
-            return
-
+        # 1. URL
+        parts = text.split(" ", 2)
+        if len(parts) < 2: return # usage error
         url = parts[1]
-        tmdb_id = parts[2] if len(parts) > 2 else "999" # Default dummy ID for tests
+        
+        # Default Params
+        tmdb_id = "0"
+        type_hint = "auto"
+        name_hint = ""
+
+        # 2. Extract Options if present
+        if len(parts) > 2:
+            remaining = parts[2]
+            
+            # Logic: If starts with quotes, it's a name hint, otherwise ID
+            # Simple splitter by spaces
+            sub_args = remaining.split(" ")
+            
+            # Helper to check if string looks like an ID
+            if sub_args[0].isdigit():
+                tmdb_id = sub_args[0]
+                if len(sub_args) > 1: type_hint = sub_args[1]
+                
+                # Check for Name Hint (everything after type)
+                # Join remaining args and strip quotes
+                if len(sub_args) > 2:
+                    name_hint = " ".join(sub_args[2:]).strip('"')
+            else:
+                # User skip ID/Type? Dangerous but assume raw name override
+                pass
 
         # Queue Logic
         if db_service.redis:
-            payload = f"{tmdb_id}|{url}"
-            # Push to the same list the Worker watches
+            
+            # Format: tmdb_id|url|type_hint|name_hint
+            payload = f"{tmdb_id}|{url}|{type_hint}|{name_hint}"
+            
             await db_service.redis.lpush("queue:leech", payload)
             
             await message.reply_text(
                 f"🚀 **Dispatched to Swarm**\n"
-                f"📦 Payload: \n"
-                f"🔗 URL: ",
+                f"📦 Payload: `{tmdb_id}` ({type_hint.upper()})\n"
+                f"📝 Hint: `{name_hint}`",
                 quote=True
-            )
+            ) 
             logger.info(f"Task dispatched: {payload}")
         else:
             await message.reply_text("❌ Redis Not Connected")
