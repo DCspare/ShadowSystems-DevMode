@@ -1,17 +1,19 @@
 # apps/manager/routers/library.py 
 import os
+import sys
 import base64
 import logging
-from core.schemas import SignRequest
+sys.path.append("/app")
+from fastapi import Depends
 from pyrogram.file_id import FileId # Used to decode the string identity
+from shared.schemas import SignRequest
 from services.database import db_service
 from core.utils import generate_short_id
-from fastapi.responses import JSONResponse
 from core.security import sign_stream_link 
+from fastapi.responses import JSONResponse
 from services.bot_manager import bot_manager
 from services.metadata import metadata_service
 from fastapi import APIRouter, HTTPException , Request
-from fastapi import Depends
 from core.security import sign_stream_link, RateLimiter
 
 logger = logging.getLogger("Library")

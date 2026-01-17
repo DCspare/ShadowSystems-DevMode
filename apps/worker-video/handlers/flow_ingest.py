@@ -1,16 +1,18 @@
-# apps/worker-video/handlers/leech.py
+# apps/worker-video/handlers/flow_ingest.py (formerly leech.py)
 import os
+import sys
+import PTN
 import time
 import logging
-import PTN
 import uuid
 import aiohttp
 import asyncio
 from pyrogram import Client, enums
-from pyrogram.types import InputMediaPhoto, InputMediaVideo
 from pyrogram.file_id import FileId
 from handlers.processor import processor
-from handlers.formatter import formatter 
+sys.path.append("/app/shared")
+from shared.formatter import formatter 
+from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
 logger = logging.getLogger("Leecher")
 
@@ -488,13 +490,25 @@ class MediaLeecher:
         
         finally:
             # 9. Robust Cleanup
+            # Force close potential pyrogram file handlers by waiting a moment
             await asyncio.sleep(2.0)
-            seen = set()
-            for f in cleanup_targets:
-                if f and f not in seen and os.path.exists(f):
+
+            # Master List: Init path + Current path + Screenshots
+            targets = set(cleanup_targets)
+            if 'current_file_path' in locals():
+                targets.add(current_file_path)
+            
+            logger.info(f"🧹 Scrubbing {len(targets)} items...")
+
+            for f in targets:
+                # Resolve Absolute Path just in case
+                abs_path = os.path.abspath(f)
+                
+                if os.path.exists(abs_path): 
                     try:
-                        os.remove(f)
-                        logger.info(f"🗑️ Del: {os.path.basename(f)}")
-                        seen.add(f)
-                    except: pass
-            logger.info("🧹 Storage Scrubbed.")
+                        # Attempt standard remove
+                        os.remove(abs_path)
+                    except Exception as e:
+                        logger.error(f"❌ Failed to delete {os.path.basename(abs_path)}: {e}")
+            
+            logger.info("✅ Cleanup phase done.")

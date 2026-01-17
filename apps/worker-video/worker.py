@@ -6,7 +6,7 @@ import time
 from pyrogram import Client, filters
 from motor.motor_asyncio import AsyncIOMotorClient
 from redis.asyncio import Redis
-from handlers.leech import MediaLeecher
+from handlers.flow_ingest import MediaLeecher
 from handlers.downloader import downloader
 
 # Configure Logging

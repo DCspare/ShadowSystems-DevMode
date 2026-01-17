@@ -12,6 +12,7 @@ services:
     env_file: .env
     volumes:
       - ./apps/manager:/app
+      - ./apps/shared:/app/shared
       - ./data/sessions:/app/sessions
       - /var/run/docker.sock:/var/run/docker.sock
     logging:
@@ -54,6 +55,7 @@ services:
     env_file: .env
     volumes:
       - ./apps/worker-video:/app
+      - ./apps/shared:/app/shared
       - ./data/sessions:/app/sessions # Shared session mount
     # depends_on:
     #   - manager

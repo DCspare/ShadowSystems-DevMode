@@ -1,8 +1,11 @@
-# manager/handlers/leech.py 
+# manager/handlers/cmd_leech.py (formerly leech.py)
 import os
+import sys
 import logging
-from pyrogram import Client, filters, enums
+sys.path.append("/app")
+from shared.schemas import SignRequest
 from services.database import db_service
+from pyrogram import Client, filters, enums
 
 logger = logging.getLogger("LeechHandler")
 

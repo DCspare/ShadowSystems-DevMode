@@ -1,8 +1,8 @@
-# apps/worker-video/handlers/formatter.py
-import logging
-import PTN
+# apps/shared/formatter.py
 import os
 import re
+import PTN
+import logging
 import urllib.parse
 from datetime import timedelta
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -61,7 +61,7 @@ class MessageFormatter:
         Ref: Monster 2004 anime example
         
         TASK #30981 COMPLETE
-        ANIME or SERIES or MOVIE # according to content 
+
         NAME: 📁 Monster [2004]
         EPISODE: S01 E04 - "The Executioner"
 
@@ -72,7 +72,7 @@ class MessageFormatter:
         ├ ⏳ Duration: 00:24:10
         ├ ⭐ Rating: 8.7/10 # from TMDB or MAL according to content 
         └ 🎭 Genre: Thriller, Mystery, Psychology # from TMDB or MAL according to content 
-            # all these are also needed in mongoDB for frontend 
+        # all these are also needed in mongoDB for frontend 
         👇 PREVIEW ASSETS
         (Screenshots & Sample attached below)
 
@@ -82,10 +82,9 @@ class MessageFormatter:
         # buttons will be great even if bot is private
         """
         is_hash = self.is_hash_filename(file_name)
-       
-        # 1. Base Info
         ptn = PTN.parse(file_name) if not is_hash else {}
         
+        # 1. Base Info
         # Priority: DB Title (Monster) > PTN Title > Filename
         title = db_entry.get('title') if db_entry else ptn.get('title', file_name)
         year = db_entry.get('year') if db_entry else ptn.get('year', '202X')
@@ -106,7 +105,7 @@ class MessageFormatter:
              
              episode_line = f"EPISODE: S{season:02d} E{episode:02d}{ep_name}"
 
-        # 4. Tech Stats
+        # 4. Technical Stats (The Tree)
         width = meta.get('width', 0)
         res_str = "Unknown"
         if width >= 3800: res_str = "4K UHD"
@@ -123,17 +122,18 @@ class MessageFormatter:
         audio_list = meta.get('audio') or meta.get('audio_tracks') # Handle both names
         
         if audio_list:
-            # Group codecs and languages
+            # Codec + Channels (e.g. AAC 5.1)
             first_codec = audio_list[0].get('codec', 'aac').upper()
             chan = float(audio_list[0].get('channels', 2.0))
             chan_str = f"{int(chan)}.1" if chan % 1 != 0 else f"{int(chan)}.0"
             
-            # Lang list
+            # Languages
             langs = []
             for t in audio_list:
                 # Prefer short code if available (e.g. 'eng'), else full 'English'
-                l = t.get('code', t.get('lang', 'unk'))[:3].upper()
-                if l not in langs: langs.append(l)
+                l = t.get('code', t.get('lang', 'unk'))[:3].lower()
+                readable = self.LANG_MAP.get(l, l.title())
+                if readable not in langs: langs.append(readable)
             
             audio_text = f"{first_codec} {chan_str} ({', '.join(langs)})"
 
@@ -148,8 +148,8 @@ class MessageFormatter:
         sub_text = "None"
         if meta.get('subtitles'):
              # Logic to highlight ENG
-             eng = any('eng' in s['code'].lower() for s in meta['subtitles'])
-             display = "English" if eng else meta['subtitles'][0]['lang']
+             eng = any('eng' in s.get('lang','').lower() for s in meta['subtitles'])
+             display = "English" if eng else meta['subtitles'][0].get('lang', 'Unknown')
              plus = len(meta['subtitles']) - 1 if eng else len(meta['subtitles'])
              if plus > 0: display += f" +{plus} others"
              sub_text = f"Soft ({display})"
@@ -163,7 +163,7 @@ class MessageFormatter:
 **NAME:** `📁 {title} [{year}]`
 {f"**{episode_line}**" if episode_line else ""}
 
-┌ 💿 **Res:** #`{res_str}`
+┌ 💿 **Res:** #{res_str}
 ├ 🔊 **Audio:** `{audio_text}`
 ├ 📝 **Subtitles:** `{sub_text}`
 ├ 💾 **Size:** `{self.human_size(meta.get('size_bytes', 0))}`
@@ -180,18 +180,28 @@ class MessageFormatter:
 
     def build_buttons(self, short_id: str):
         """Generates Buttons: Watch Online | Direct DL
-           Automatically cleans short_id and ensures strict URL validity.
+           Safety: Automatically cleans short_id and ensures strict URL validity.
+           Safety: Telegram rejects non-HTTPS links for buttons.
         """
         if not short_id: return None
         
         # Ensure short_id is url safe
         safe_id = urllib.parse.quote(str(short_id))
-        url = f"{self.domain}/view/{safe_id}"
+
+        # Valid Domain Check (Prevents localhost/http crash)
+        if not self.domain.startswith("https://"):
+            return None # Skip buttons if testing locally
+
+        # Link 1: Archive Page (Direct DL)
+        # Link 2: View Page (Streaming)
+        # Explicit Button Construction
+        archive_url = f"{self.domain}/archive/{safe_id}"
+        view_url = f"{self.domain}/view/{safe_id}"
 
         return InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("📥 Direct DL", url=url),
-                InlineKeyboardButton("🎬 Watch Online", url=url)
+                InlineKeyboardButton("📥 Direct DL", url=archive_url),
+                InlineKeyboardButton("🎬 Watch Online", url=view_url)
             ]
         ])
 
