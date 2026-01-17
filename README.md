@@ -19,26 +19,59 @@ To bypass hardware constraints during building, we utilize **"Potato-Mode" Workf
 
 ```text
 SHADOW-SYSTEMS (Root)
-├── apps/                    # Monorepo Components
-│   ├── gateway/             # Nginx Load Balancer (Secure Link Logic)
-│   ├── manager/             # FastAPI Brain (Auth, Metadata, API)
-│   └── stream-engine/       # Golang High-Performance Passthrough
-│   ├── web/                 # Next.js Frontend (Obsidian Glass UI)
-│   ├── worker-manga/        # Specialized ReadVault Scrapers
-│   ├── worker-video/        # High-Speed Video Swarm
-│       ├── handlers/        # Logic Pipelines
-│       │   ├── downloader.py # Hybrid Aria2 + Native HTTP Engine
-│       │   ├── leech.py     # Identity Sanitization & Transfer Core
-│       │   ├── formatter.py # Aesthetic Telegram Caption Engine
-│       │   └── processor.py # FFmpeg Media & Screenshot Engine
-│       ├── Dockerfile       # Python 3.12 Media Image
-│       ├── requirements.txt # Version-pinned Media Libs
-│       └── worker.py        # Redis Task Watcher & Bot identity
-├── config/                  # External Configuration & Session Storage
-├── data/                    # Local Volume Persistence (Cache/Sessions)
-├── docs/                    # Architectural Blueprints (Context Files)
-├── docker-compose.dev.yml   # "Potato Mode" Development Orchestrator
-└── .env.example             # Environmental Secrets
+├── apps/                         # Monorepo Components
+│   ├── gateway/                  # Nginx Load Balancer (Secure Link Logic)
+│   │   ├── Dockerfile
+│   │   └── nginx.conf.template
+│   ├── manager/                  # FastAPI Brain (Auth, Metadata, API)
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   ├── security.py
+│       │   └── utils.py
+│       ├── handlers/
+│       │   └── cmd_leech.py
+│       ├── routers/
+│       │   └── library.py
+│       ├── services/
+│       │   ├── __init__.py
+│       │   ├── bot_manager.py
+│       │   ├── database.py
+│       │   └── metadata.py
+│       ├── Dockerfile
+│       ├── main.py
+│       └── requirements.txt
+│   ├── shared/                   # 🟢 NEW: Shared Kernel (The "Dry" Logic)
+│   │   ├── formatter.py          # Centralized Telegram visual styling
+│   │   ├── schemas.py            # Pydantic Sources of Truth
+│   │   └── settings.py      
+│   ├── stream-engine/            # Golang High-Performance Passthrough
+│       ├── core/
+│       │   ├── downloader.py
+│       │   └── telegram.py
+│       ├── Dockerfile
+│       └── main.go
+│   ├── web/                      # Next.js Frontend (Obsidian Glass UI)
+│   ├── worker-manga/             # Specialized ReadVault Scrapers
+│   ├── worker-video/             # High-Speed Video Swarm
+│       ├── handlers/             # Logic Pipelines
+│       │   ├── downloader.py     # Hybrid Aria2 + Native HTTP Engine
+│       │   ├── flow_ingest.py    # Identity Sanitization & Transfer Core 
+│       │   └── processor.py      # FFmpeg Media & Screenshot Engine
+│       ├── Dockerfile            # Python 3.12 Media Image
+│       ├── entrypoint.sh
+│       ├── requirements.txt      # Version-pinned Media Libs
+│       └── worker.py             # Redis Task Watcher & Bot identity
+├── config/                       # External Configuration & Session Storage
+├── data/                         # Local Volume Persistence (Cache/Sessions)
+├── docs/                         # Architectural Blueprints (Context Files)
+├── .dockerignore
+├── .env.example                  # Environmental Secrets
+├── .gitignore
+├── docker-compose.dev.yml        # "Potato Mode" Development Orchestrator
+├── gen_session.py
+├── README.md
+└── Survivors-Logs.md
 ```
 
 ---
@@ -123,6 +156,12 @@ SHADOW-SYSTEMS (Root)
 - [x] **Aesthetic Logging:** Integrated `formatter.py` to produce clean, tree-styled Telegram captions with metadata pills.
 - [x] **Defense Level 1 & 3:** Implemented "Click-to-Sign" Lazy Links (`POST /sign`) and Redis Rate Limiting (5 req/min) to prevent scraping abuse.
 
+### 💎 Achievements (v0.5.0-delta) - The Shared Kernel & Enrichment
+- [x] **Architectural Refactor:** Migrated to a **Shared Kernel Pattern (`apps/shared`)**. Database Schemas (`Pydantic`) and Formatter logic are now centralized, preventing code duplication between Manager and Workers.
+- [x] **FFmpeg Intelligence:** Integrated `processor.py` to Probe subtitle tracks/audio codecs, generate 3-point screenshots, and cut smart 30s sample clips.
+- [x] **Smart Series Mapping:** Implemented `PTN` logic with a Fallback RegEx to detect `SxxExx` patterns. Episodes now automatically sort into nested MongoDB Season buckets (`seasons.1`, `seasons.2`).
+- [x] **Atomic Transactions:** Secured the Leech pipeline with "Cleanup-Finally" blocks and strict Database Upsert paths (Skeleton Creation vs Enrichment Update) to prevent data corruption.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -163,5 +202,5 @@ docker compose -f docker-compose.dev.yml down
 
 ---------
 
-*Last Updated: 2026-01-16*
-*Time: 05:12pm*
+*Last Updated: 2026-01-17*
+*Time: 003:45pm*

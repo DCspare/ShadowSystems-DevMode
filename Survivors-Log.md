@@ -204,3 +204,18 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 *   **The Error:** `update only works with $ operators`.
 *   **Description:** Using `upsert=True` fails if the document skeleton definition is mixed inside the `$push` logic dynamically without strict separation.
 *   **The Fix:** Split the DB Write logic into strict branches: `find_one` -> If exists `update_one` ($push) -> Else `insert_one` (Full Skeleton).
+
+#### 🧱 Hurdle #34: Python Module "Sibling" Imports in Docker
+*   **The Error:** `ModuleNotFoundError: No module named 'apps'` when importing shared schemas.
+*   **Description:** Python treats imports relative to the working directory. In Docker, our root is `/app`. Tries to import `apps.shared` failed because the folder structure inside container didn't match host exactly.
+*   **The Fix:** Implemented `sys.path.append("/app/shared")` and strict volume mounting in Docker Compose (`./apps/shared:/app/shared`) to make the kernel accessible to all containers.
+
+#### 🧱 Hurdle #35: The Button 400 Invalid URL
+*   **The Error:** `BUTTON_URL_INVALID` causing worker crash.
+*   **Description:** Telegram API strictly rejects Inline Buttons if the URL starts with `http://` or `localhost`. This crashed the bot during local testing tunnels without SSL.
+*   **The Fix:** Added strict validation in `formatter.py`: If `DOMAIN_NAME` does not start with `https://`, the bot suppresses the generation of "Watch Online" buttons to prevent crashes in Dev Mode.
+
+#### 🧱 Hurdle #36: The "Variables from Thin Air" Trap
+*   **The Error:** `UnboundLocalError: local variable 'video' referenced before assignment`.
+*   **Description:** In the FFprobe parser, we defined variables inside a `try` block or a loop. If the loop didn't run (empty streams), the variable remained undefined, crashing the cleanup logic.
+*   **The Fix:** Adopted the **"Defaults First"** pattern. All return dictionaries are initialized with safe default values (0, empty list) *before* processing begins, ensuring `leech.py` never receives `NoneType`.
