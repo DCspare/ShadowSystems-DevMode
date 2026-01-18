@@ -1,10 +1,11 @@
+# apps/manager/core/security.py 
 import time
 import base64
 import hashlib
 import logging
-from core.config import settings
+from shared.settings import settings
+from shared.database import db_service
 from fastapi import HTTPException, Request, Depends
-from services.database import db_service
 
 logger = logging.getLogger("Security")
 

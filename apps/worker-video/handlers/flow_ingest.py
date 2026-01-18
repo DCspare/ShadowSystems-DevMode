@@ -7,10 +7,11 @@ import logging
 import uuid
 import aiohttp
 import asyncio
+sys.path.append("/app/shared")
 from pyrogram import Client, enums
+from shared.settings import settings
 from pyrogram.file_id import FileId
 from handlers.processor import processor
-sys.path.append("/app/shared")
 from shared.formatter import formatter 
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
@@ -20,14 +21,15 @@ class MediaLeecher:
     def __init__(self, client, db):
         self.client = client
         self.db = db
-        # Env feature flags
-        self.gen_samples = os.getenv("GENERATE_SAMPLES", "True").lower() == "true"
-        self.tmdb_api_key = os.getenv("TMDB_API_KEY", "your_key_here") # Ensure this is set
-        self.branding = os.getenv("FILE_BRANDING_TAG", "[ShadowSystem]")
+
+        # ✨ CLEAN CONFIG USAGE
+        self.gen_samples = settings.GENERATE_SAMPLES
+        self.tmdb_api_key = settings.TMDB_API_KEY
+        self.branding = settings.FILE_BRANDING_TAG
         
         try:
-            self.log_channel = int(os.getenv("TG_LOG_CHANNEL_ID", "0"))
-            self.backup_channel = int(os.getenv("TG_BACKUP_CHANNEL_ID", "0"))
+            self.log_channel = settings.TG_LOG_CHANNEL_ID
+            self.backup_channel = settings.TG_BACKUP_CHANNEL_ID
         except:
             self.log_channel = 0
             self.backup_channel = 0

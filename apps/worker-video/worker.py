@@ -1,13 +1,17 @@
+# apps/worker-video/worker.py 
+import os
+import sys
+import time
 import asyncio
 import logging
-import os
 import subprocess
-import time
-from pyrogram import Client, filters
-from motor.motor_asyncio import AsyncIOMotorClient
+sys.path.append("/app/shared")
 from redis.asyncio import Redis
-from handlers.flow_ingest import MediaLeecher
+from shared.settings import settings
+from pyrogram import Client, filters
 from handlers.downloader import downloader
+from handlers.flow_ingest import MediaLeecher
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Configure Logging
 logging.basicConfig(
@@ -25,7 +29,8 @@ class VideoWorker:
         self.db = None
         self.redis = None
         self.leecher = None
-        self.worker_id = os.getenv("WORKER_ID", "video_worker_1")
+        # Identity via Env Var (e.g. video_1) or fallback
+        self.worker_id = os.getenv("WORKER_ID", "worker_1")
         # Ensure log_channel is int
         try:
             self.log_channel = int(os.getenv("TG_LOG_CHANNEL_ID"))
@@ -92,9 +97,9 @@ class VideoWorker:
         self.clean_slate()
         
         # 1. DB
-        mongo_client = AsyncIOMotorClient(os.getenv("MONGO_URL"))
+        mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
         self.db = mongo_client["shadow_systems"]
-        self.redis = Redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+        self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         
         # 2. Downloader
         self.start_aria2_daemon()
@@ -103,26 +108,29 @@ class VideoWorker:
         # 3. Telegram Init
         logger.info("Initializing Pyrogram Client...")
         is_bot_mode = os.getenv("WORKER_MODE", "BOT") == "BOT"
+
+        session_name = os.getenv("SESSION_FILE", "worker_default")
         
         if is_bot_mode:
+            logger.info(f"🤖 Bot Mode Active: {session_name}")
             self.app = Client(
                 name="worker_bot",
-                api_id=int(os.getenv("TG_API_ID")),
-                api_hash=os.getenv("TG_API_HASH"),
-                bot_token=os.getenv("TG_WORKER_BOT_TOKEN"),
+                api_id=settings.TG_API_ID,
+                api_hash=settings.TG_API_HASH,
+                bot_token=settings.TG_WORKER_BOT_TOKEN,
                 workdir="/app/sessions" 
             )
         else:
-            session_name = os.getenv("SESSION_FILE", "worker_default")
+            logger.info(f"⚡ User Session Mode Active: {session_name}")
             self.app = Client(
                 name=session_name,
-                api_id=int(os.getenv("TG_API_ID")),
-                api_hash=os.getenv("TG_API_HASH"),
+                api_id=settings.TG_API_ID,
+                api_hash=settings.TG_API_HASH,
                 workdir="/app/sessions"
             )
 
         # ---------------------------------------------
-        # MANUAL HEALTH CHECK COMMAND (The New Fix)
+        # MANUAL HEALTH CHECK COMMAND
         # ---------------------------------------------
         @self.app.on_message(filters.command("health"))
         async def health_check(client, message):
@@ -143,7 +151,7 @@ class VideoWorker:
              )
              # FORCE CACHE UPDATE
             # self.log_channel = message.chat.id
-            logger.info(f"Health Check successful. Session validated. Chat: {message.chat.title}")
+            logger.info(f"Health Check successful. Session validated: {message.chat.title}")
 
         # 4. Start
         await self.app.start()
@@ -191,7 +199,7 @@ class VideoWorker:
                         
                         if local_path and os.path.exists(local_path):
                             
-                            # 🔄 RENAME LOGIC (The Fix for PTN)
+                            # Optional: Rename before process
                             if name_hint:
                                 dir_name = os.path.dirname(local_path)
                                 ext = os.path.splitext(local_path)[1]
@@ -201,6 +209,7 @@ class VideoWorker:
                                 logger.info(f"✏️ Renaming: {os.path.basename(local_path)} -> {new_filename}")
                                 os.rename(local_path, new_path)
                                 local_path = new_path
+                                logger.info(f"Renamed hint applied: {new_filename}")
 
                             # 2. Upload with Hint
                             await self.leecher.upload_and_sync(

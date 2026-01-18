@@ -2,15 +2,16 @@
 import os
 import sys
 import logging
-sys.path.append("/app")
+sys.path.append("/app/shared")
+from shared.settings import settings
+from shared.database import db_service
 from shared.schemas import SignRequest
-from services.database import db_service
 from pyrogram import Client, filters, enums
 
 logger = logging.getLogger("LeechHandler")
 
-# Security: Only allow Owner
-OWNER_ID = int(os.getenv("TG_OWNER_ID", 0))
+# Security: Only allow Owner (Loaded from Pydantic Settings)
+OWNER_ID = settings.TG_OWNER_ID
 
 @Client.on_message(filters.command(["leech", "mirror"]) & filters.user(OWNER_ID))
 async def leech_command(client, message):
@@ -58,12 +59,18 @@ async def leech_command(client, message):
             
             await db_service.redis.lpush("queue:leech", payload)
             
+            # Generate Channel Link from Settings
+            # Strip -100 for proper Deep Link
+            clean_cid = str(settings.TG_LOG_CHANNEL_ID).replace("-100", "")
+            chan_link = f"https://t.me/c/{clean_cid}/1"
+            
             await message.reply_text(
                 f"🚀 **Dispatched to Swarm**\n"
                 f"📦 Payload: `{tmdb_id}` ({type_hint.upper()})\n"
-                f"📝 Hint: `{name_hint}`",
+                f"📝 Hint: `{name_hint}`\n"
+                f"📡 Channel: [Open Log]({chan_link})",
                 quote=True
-            ) 
+            )
             logger.info(f"Task dispatched: {payload}")
         else:
             await message.reply_text("❌ Redis Not Connected")

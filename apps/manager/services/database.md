@@ -1,7 +1,8 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+# apps/manager/services/database.py 
+import logging
 from redis.asyncio import Redis
 from core.config import settings
-import logging
+from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger("Database")
 

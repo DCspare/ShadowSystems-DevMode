@@ -41,22 +41,30 @@ SHADOW-SYSTEMS (Root)
 │       ├── Dockerfile
 │       ├── main.py
 │       └── requirements.txt
-│   ├── shared/                   # 🟢 NEW: Shared Kernel (The "Dry" Logic)
+...
+│   ├── shared/                   # Shared Kernel (The "Dry" Logic)
+│   │   ├── __init__.py
+│   │   ├── database.py           # Shared DB Connector
 │   │   ├── formatter.py          # Centralized Telegram visual styling
 │   │   ├── schemas.py            # Pydantic Sources of Truth
-│   │   └── settings.py      
+│   │   ├── config.py             # Deprecated Formerly `apps/manager/core/config.py`
+│   │   └── settings.py           # Master Pydantic Config (Environment Source of Truth)
+...
 │   ├── stream-engine/            # Golang High-Performance Passthrough
 │       ├── core/
-│       │   ├── downloader.py
+│       │   ├── downloader.py   
 │       │   └── telegram.py
 │       ├── Dockerfile
 │       └── main.go
+...
 │   ├── web/                      # Next.js Frontend (Obsidian Glass UI)
+...
 │   ├── worker-manga/             # Specialized ReadVault Scrapers
+...
 │   ├── worker-video/             # High-Speed Video Swarm
 │       ├── handlers/             # Logic Pipelines
 │       │   ├── downloader.py     # Hybrid Aria2 + Native HTTP Engine
-│       │   ├── flow_ingest.py    # Identity Sanitization & Transfer Core 
+│       │   ├── flow_ingest.py    # Identity Sanitization & Transfer Core (Formerly leech.py)
 │       │   └── processor.py      # FFmpeg Media & Screenshot Engine
 │       ├── Dockerfile            # Python 3.12 Media Image
 │       ├── entrypoint.sh
@@ -108,6 +116,7 @@ SHADOW-SYSTEMS (Root)
 - **Hybrid Downloader:** Smart fallback system. If `Aria2` fails on Cloud IPs (Error 16), system auto-switches to `yt-dlp` native sockets.
 - **Metadata Upsert:** "Skeleton" logic creates database entries even if TMDB fails, preventing file loss.
 - **Database Indexing:** Search engine optimized with `title` and `author` Text Indexes.
+- **Central Nervous System:** Implemented `apps/shared/settings.py` (Pydantic BaseSettings). Replaced all unsafe `os.getenv` calls with strict type-validated configuration objects, shared across Manager and Workers.
 
 <details>
     <summary><b>🔥 PART 3: Survival, Operations & B2B</b></summary>
@@ -159,8 +168,8 @@ SHADOW-SYSTEMS (Root)
 ### 💎 Achievements (v0.5.0-delta) - The Shared Kernel & Enrichment
 - [x] **Architectural Refactor:** Migrated to a **Shared Kernel Pattern (`apps/shared`)**. Database Schemas (`Pydantic`) and Formatter logic are now centralized, preventing code duplication between Manager and Workers.
 - [x] **FFmpeg Intelligence:** Integrated `processor.py` to Probe subtitle tracks/audio codecs, generate 3-point screenshots, and cut smart 30s sample clips.
-- [x] **Smart Series Mapping:** Implemented `PTN` logic with a Fallback RegEx to detect `SxxExx` patterns. Episodes now automatically sort into nested MongoDB Season buckets (`seasons.1`, `seasons.2`).
-- [x] **Atomic Transactions:** Secured the Leech pipeline with "Cleanup-Finally" blocks and strict Database Upsert paths (Skeleton Creation vs Enrichment Update) to prevent data corruption.
+- [x] **Smart Series Mapping:** Logic to detect `SxxExx` via filename or Manual Hints (`/leech ... "Title S01E01"`). Implemented `PTN` logic with a Fallback RegEx to detect `SxxExx` patterns. Episodes now automatically sort into nested MongoDB Season buckets (`seasons.1`, `seasons.2`).
+- [x] **Atomic Transactions:** Renamed `leech.py` to `flow_ingest.py` for semantic clarity. Secured the Leech pipeline with "Cleanup-Finally" blocks and strict Database Upsert paths (Skeleton Creation vs Enrichment Update) to prevent data corruption.
 
 ---
 
@@ -202,5 +211,5 @@ docker compose -f docker-compose.dev.yml down
 
 ---------
 
-*Last Updated: 2026-01-17*
-*Time: 003:45pm*
+*Last Updated: 2026-01-18*
+*Time: 05:32pm*

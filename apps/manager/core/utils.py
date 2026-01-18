@@ -1,3 +1,4 @@
+# apps/manager/core/utils.py 
 import string
 import random
 

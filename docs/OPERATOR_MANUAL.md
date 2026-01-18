@@ -88,7 +88,7 @@ docker system prune -f
 docker exec -it sv-gateway-dev sh -c "rm -rf /var/cache/nginx/streamvault/*"
 ```
 
-### 🧹 3 B: The "Aggressive Prune" Script
+#### 🧹 3 B: The "Aggressive Prune" Script
 *Running `docker system prune` is good, but `prune --volumes` is better for dev work (cleans up orphan DB/Cache volumes), and `prune -a` removes unused images (old builds).*
 
 
@@ -243,7 +243,7 @@ python3 gen_session.py
 
 #### 7. To simulate exactly what the Frontend does: **Browse --> Select --> Sign**.
 
-### 🕵️ Step 1: Find valid IDs
+#### 🕵️ Step 1: Find valid IDs
 First, we need to grab a `short_id` and a `telegram_id` from your existing library to test with.
 
 Run this command in your terminal:
@@ -274,7 +274,7 @@ curl -X POST http://localhost:8080/api/library/sign \
   }'
 ```
 
-### ✅ Expected Output
+#### ✅ Expected Output
 You should see a JSON response like this:
 
 ```json
@@ -289,13 +289,13 @@ If you see `token=` and `expires=`, **Logic is Valid.** You successfully complet
 
 ---
 
-### 🎬 Step 3: Test the Stream
+#### 🎬 Step 3: Test the Stream
 Take the **`stream_url`** path from the previous output and paste it into this URL in your **IDX Preview Browser** or simply execute:
 
 ```bash
 curl -I "http://localhost:8080/stream/YOUR_FILE_ID?token=YOUR_TOKEN&expires=YOUR_TIMESTAMP"
 ```
-### ✅ Expected Output
+#### ✅ Expected Output
 You should see a JSON response like this:
 
 ```json
@@ -312,3 +312,41 @@ Content-Range: bytes 0-43780762/43780763
 *   **HTTP 200/206:** Success. The key is valid.
 *   **HTTP 403 Forbidden:** The IP signing failed (or Nginx didn't like the hash).
     *   *Dev Note:* If you generate the link via **Terminal Curl** but try to play it in **Chrome Browser**, it **might** fail if Nginx detects an IP mismatch (Terminal Container IP vs Browser Tunnel IP). This is a good security feature! To test visual playback, try making the API request directly in the browser address bar for `view`, manually constructing a mock post is hard, so relies on the `curl -I` status code for now.
+
+---
+
+### 🔐 Security Protocols: Admin API Access
+*Reference for manual interventions when `MODE=PROD`.*
+
+When the system is in Production Mode, all "Write" operations (`POST`, `PUT`, `DELETE`) and sensitive "Sign" operations are locked behind the Gatekeeper. You must provide the **API Secret** to authorized commands.
+
+**Prerequisite:** Check your `.env` for `API_SECRET_KEY` (e.g., `shadow_super_secret_dev_key`).
+
+#### 1. Generating a Secure Stream Link (Manually)
+Used to debug if the Nginx hashing is working for a specific file.
+
+```bash
+curl -X POST http://localhost:8080/api/library/sign \
+  -H "Content-Type: application/json" \
+  -H "X-Shadow-Secret: shadow_super_secret_dev_key" \
+  -d '{
+    "short_id": "abb276a", 
+    "file_id": "BQACAg..." 
+  }'
+```
+
+#### 2. Nuking a Movie (DELETE)
+Used to forcefully remove an entry if the UI is inaccessible.
+
+```bash
+curl -X DELETE http://localhost:8080/api/library/delete/106379 \
+  -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```
+
+#### 3. Triggering a Remote Ingest (Leech via API)
+Used to automate uploads from external scripts without using Telegram.
+
+```bash
+curl -X POST http://localhost:8080/api/attach_file/550?file_path=/path/to/movie.mkv \
+  -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```

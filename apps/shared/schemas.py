@@ -1,4 +1,4 @@
-# apps/manager/core/schemas.py
+# apps/shared/schemas.py
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime

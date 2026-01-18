@@ -1,8 +1,11 @@
+# apps/manager/main.py 
+import sys
 import logging
-from routers import library 
-from core.config import settings
+from routers import library
+sys.path.append("/app/shared") # Docker fix for imports 
 from fastapi import FastAPI, Request 
-from services.database import db_service
+from shared.settings import settings
+from shared.database import db_service
 from fastapi.responses import JSONResponse
 from services.bot_manager import bot_manager
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +17,9 @@ logger = logging.getLogger("Manager")
 
 class GatekeeperMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # path IS DEFINED GLOBALLLY 
+        path = request.url.path
+
         # 1. WHITE-LIST ROUTES (Always Open)
         # /health = Monitoring, /docs = Swagger, /library/internal = Nginx Resolver
         if request.url.path in ["/", "/health", "/docs", "/openapi.json"] or \
@@ -21,23 +27,30 @@ class GatekeeperMiddleware(BaseHTTPMiddleware):
            request.method == "OPTIONS": # Allow Preflight
             return await call_next(request)
 
-        # 2. DEV MODE BYPASS
+        # 2. DEV MODE BYPASS (Write Operations)
         if settings.MODE == "DEV":
             # Pass, but we can log suspicious traffic here if wanted
             return await call_next(request)
 
-        # 3. PRODUCTION ENFORCEMENT
-        # Verify Origin Logic (If STRICT) or Secret Logic
-        
-        # Strategy: Strict Secret Check
+        # 3. PUBLIC READ ACCESS (SEO / Guest Friendly)
+        # Allow anyone to View List, Search, and View Items
+        if request.method == "GET" and not path.startswith("/admin") and not path.startswith("/library/internal"):
+            return await call_next(request)
+
+        # 4. INTERNAL & SYSTEM PROTECTION (Always locked)
+        # Nginx uses this, or Manual Admin checks
+        if path.startswith("/library/internal"):
+             # We rely on Nginx IP whitelisting or Internal docker network
+             # If accessed publicly, we can enforce secret, but usually Nginx blocks external access to this path anyway.
+             # For now, let's allow it if it's within the Docker network (hard to detect here easily) 
+             # OR strictly check secret if you want:
+             pass
+
+        # 5. STRICT PROD AUTHENTICATION (For Writes / Admin / Sensitive)
         client_key = request.headers.get("X-Shadow-Secret")
         
-        # NOTE: For Public GET routes (like SEO Metadata), you might want to skip this 
-        # so GoogleBot can crawl. Uncomment next line to Lock Writes ONLY:
-        # if request.method in ["GET"]: return await call_next(request)
-        
         if client_key != settings.API_SECRET_KEY:
-            logger.warning(f"⛔ Intruder Blocked: {request.client.host}")
+            logger.warning(f"⛔ Intruder Blocked: {request.client.host} {request.method} {path}")
             return JSONResponse(
                 status_code=403, 
                 content={"detail": "🛡️ Access Denied: Missing Shadow-Key"}
@@ -56,9 +69,8 @@ app.add_middleware(GatekeeperMiddleware)
 if settings.MODE == "DEV":
     allow_origins = ["*"]
 else:
+    # Use format: ["https://shadow-systems.xyz"]
     allow_origins = [f"https://{settings.DOMAIN_NAME}"]
-
-app = FastAPI(title="Shadow Systems Manager", version="2.0.0")
 
 # --- MIDDLEWARE ---
 app.add_middleware(

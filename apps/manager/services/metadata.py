@@ -1,7 +1,8 @@
+# apps/manager/services/metadata.py 
+import os
 import aiohttp
 import logging
-import os
-from core.config import settings
+from shared.settings import settings
 
 logger = logging.getLogger("Metadata")
 

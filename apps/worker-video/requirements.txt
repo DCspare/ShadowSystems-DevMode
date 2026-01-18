@@ -1,3 +1,4 @@
+# apps/worker-video/requirements.txt 
 # --- Telegram Core ---
 pyrogram==2.0.106
 tgcrypto==1.2.5
@@ -7,6 +8,7 @@ motor==3.3.2
 pymongo==4.6.3
 redis==5.0.1
 python-dotenv==1.0.1
+pydantic-settings==2.1.0
 
 # --- Media Analysis & Operations ---
 hachoir==3.1.2         

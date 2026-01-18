@@ -219,3 +219,18 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 *   **The Error:** `UnboundLocalError: local variable 'video' referenced before assignment`.
 *   **Description:** In the FFprobe parser, we defined variables inside a `try` block or a loop. If the loop didn't run (empty streams), the variable remained undefined, crashing the cleanup logic.
 *   **The Fix:** Adopted the **"Defaults First"** pattern. All return dictionaries are initialized with safe default values (0, empty list) *before* processing begins, ensuring `leech.py` never receives `NoneType`.
+
+#### 🧱 Hurdle #37: Pydantic "Missing Field" Crash
+*   **The Error:** `pydantic.error_wrappers.ValidationError` on app startup.
+*   **Description:** Switching to strict `settings.py` caused the app to crash because `.env` was missing new keys (like `API_SECRET_KEY`) that were marked as required strings.
+*   **The Fix:** Updated `SettingsConfigDict` to allow `extra="ignore"` and provided sensible default values (`= None` or `"unsafe_default"`) for optional keys to prevent boot loops during dev setup.
+
+#### 🧱 Hurdle #38: The Variable "Name Shadow"
+*   **The Error:** `UnboundLocalError: local variable 'video' referenced before assignment`.
+*   **Description:** Python's scoping rules inside `try/except` blocks caused variables defined only in the happy path to be undefined during the exception handler logic.
+*   **The Fix:** Adopted a "Defense-First" initialization pattern where all return variables (width, height, duration) are set to `0` or `None` at the very top of the function, ensuring they exist regardless of execution flow.
+
+#### 🧱 Hurdle #39: MongoDB Operator Injection
+*   **The Error:** `update only works with $ operators`.
+*   **Description:** Bash Heredocs (`cat <<EOF`) attempted to expand `$push` and `$set` as shell variables, resulting in empty strings being written to the Python file.
+*   **The Fix:** Switched to **Quoted Heredocs** (`cat <<'EOF'`) to treat the input as a raw string, preserving the MongoDB operator syntax inside the container.

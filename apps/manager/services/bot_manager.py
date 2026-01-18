@@ -1,7 +1,8 @@
+# apps/manager/services/bot_manager.py 
 import os
 import logging
 from pyrogram import Client
-from core.config import settings
+from shared.settings import settings
 
 logger = logging.getLogger("BotManager")
 

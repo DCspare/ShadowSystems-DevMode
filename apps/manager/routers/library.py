@@ -7,7 +7,7 @@ sys.path.append("/app")
 from fastapi import Depends
 from pyrogram.file_id import FileId # Used to decode the string identity
 from shared.schemas import SignRequest
-from services.database import db_service
+from shared.database import db_service
 from core.utils import generate_short_id
 from core.security import sign_stream_link 
 from fastapi.responses import JSONResponse
