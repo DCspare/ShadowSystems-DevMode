@@ -95,23 +95,29 @@ class MessageFormatter:
 
         # 3. Episode Block (S01 E04 - "Title")
         # (Prioritize Manual args from Leecher)
-        episode_line = ""
         season = manual_s if manual_s is not None else ptn.get('season')
         episode = manual_e if manual_e is not None else ptn.get('episode')
 
+        episode_line = ""
+
         # Logic: If we have an episode number, show it (even if season missing, assume S1 visual)
         if episode is not None:
-             # Force int for safety formatting
-             s_val = int(season) if season is not None else 1
-             e_val = int(episode)
+             try:
+                 e_val = int(episode)
+                 s_val = int(season) if season is not None else 1
+             except ValueError:
+                 e_val = 0
+                 s_val = 1
              
              ep_title_str = ""
              # Check deeply nested structure or raw dictionary for title
              if episode_meta and isinstance(episode_meta, dict):
                  t = episode_meta.get('name')
+                 # Sanitize double quotes to avoid string break
                  if t: ep_title_str = f' - "{t}"'
 
-             episode_line = f"EPISODE: S{s_val:02d} E{e_val:02d}{ep_title_str}"
+             # Format: **EPISODE:** `S01 E02 - "Name"`
+             episode_line = f"**EPISODE:** `S{s_val:02d} E{e_val:02d}{ep_title_str}`"
 
         # 4. Technical Stats (The Tree)
         width = meta.get('width', 0)
@@ -169,7 +175,7 @@ class MessageFormatter:
 **TASK #{tmdb_id} COMPLETE**
 
 **NAME:** `📁 {title} [{year}]`
-{f"**{episode_line}**" if episode_line else ""}
+{episode_line if episode_line else ""}
 
 ┌ 💿 **Res:** #{res_str}
 ├ 🔊 **Audio:** `{audio_text}`

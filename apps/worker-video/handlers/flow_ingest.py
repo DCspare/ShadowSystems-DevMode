@@ -510,37 +510,25 @@ class MediaLeecher:
             return False
         
         finally:
-            # 9. Robust Cleanup & Lock Release
-            # We must clear lists and ensure asyncio doesn't hold references
-            await asyncio.sleep(2.0) # Release Windows/Linux FS locks
+            # Note: This is safe because "Potato Mode" runs one task at a time.
             
-            # Combine all tracking lists
-            master_list = set()
+            # 9. Nuclear Cleanup
+            # Wipes the entire download directory contents
+            await asyncio.sleep(1.0)
             
-            if 'cleanup_targets' in locals() and cleanup_targets:
-                master_list.update(cleanup_targets)
-                
-            # Specifically add the original and renamed paths if variables exist
-            if 'file_path' in locals() and file_path: 
-                 master_list.add(file_path)
-            if 'current_file_path' in locals() and current_file_path:
-                 master_list.add(current_file_path)
-                 
-            # Also screenshots/samples variable might exist locally
-            if 'screenshots' in locals() and screenshots:
-                 master_list.update(screenshots)
-            if 'sample_path' in locals() and sample_path:
-                 master_list.add(sample_path)
-
+            dl_dir = "/app/downloads"
             count = 0
-            for f in master_list:
-                try:
-                    if f and os.path.exists(f):
-                        os.remove(f)
-                        count += 1
-                        logger.debug(f"Deleted: {os.path.basename(f)}")
-                except Exception as e:
-                    # Often "File not found" if renamed, benign error
-                    pass
             
-            logger.info(f"🧹 Scrubbed {count} temp files.")
+            if os.path.exists(dl_dir):
+                logger.info("☢️ NUKING DOWNLOADS FOLDER...")
+                for filename in os.listdir(dl_dir):
+                    file_path = os.path.join(dl_dir, filename)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.remove(file_path)
+                            count += 1
+                        # We don't remove dirs here typically, but we could if needed
+                    except Exception as e:
+                        logger.error(f"❌ Nuke Failed for {filename}: {e}")
+            
+            logger.info(f"🧹 Scrubbed {count} residue files.")
