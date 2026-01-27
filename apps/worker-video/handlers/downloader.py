@@ -1,10 +1,13 @@
 # apps/worker-video.handlers/downloader.py  
 import os
+import sys
 import time
 import aria2p
 import yt_dlp
 import asyncio
 import logging
+sys.path.append("/app/shared")
+from shared.progress import progress_bar
 
 logger = logging.getLogger("Downloader")
 
@@ -25,18 +28,21 @@ class Downloader:
             self.aria2 = None
 
     def _native_logger_progress(self, d):
-        """Dedicated hook to make yt-dlp logs visible in Docker"""
+        """Native hook for yt-dlp"""
         if d['status'] == 'downloading':
+            # Mapping yt-dlp data to our Shared Class
             try:
-                raw_pct = d.get('_percent_str', '0%').strip()
-                clean_pct = raw_pct.replace('%','').split('.')[0]
-                pct_val = int(clean_pct)
-                if pct_val % 20 == 0 and pct_val > 0:
-                     print(f"⬇️ [DL] {raw_pct} | {d.get('_speed_str')} | ETA {d.get('_eta_str')}", flush=True)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate')
+                current = d.get('downloaded_bytes')
+                elapsed = d.get('elapsed')
+                # Infer start_time roughly for the calculator
+                start_time = time.time() - elapsed if elapsed else time.time()
+                
+                progress_bar.log(current, total, "Web DL", start_time)
             except:
-                pass 
+                pass
         elif d['status'] == 'finished':
-            print("✅ [DL] Download Phase Complete. Finalizing...", flush=True)
+            print("✅ Native Download Complete.", flush=True)
 
     def _get_safe_filename(self, candidate, default="video"):
         """Prevents Errno 36 (Filename too long)"""
@@ -189,18 +195,15 @@ class Downloader:
                     # logger.info("✅ 🧲 Download Complete. Processing...")
                     break
                     
-                 # LIVE PROGRESS BAR
+                # UNIFIED PROGRESS BAR
                 if download.total_length > 0:
-                    pct = int(download.completed_length * 100 / download.total_length)
-                    
-                    # Create a visual bar [█████------]
-                    bar_len = 25 
-                    filled_len = int(bar_len * pct // 100)
-                    bar = '█' * filled_len + '-' * (bar_len - filled_len)
-                    
-                    # \r = return to start of line, end='' = don't add new line
-                    msg = f"\r🧲 [{bar}] {pct}% | ⚡ {download.download_speed_string()} | 📦 {download.total_length_string()}"
-                    print(msg, end='', flush=True)
+                    # Using the creation time of object as approximation or tracking locally
+                    # aria2p doesn't give precise start time object easily, we can skip ETA or estimate
+                    progress_bar.log(
+                        current=download.completed_length,
+                        total=download.total_length,
+                        desc="Magnet DL"
+                    )
                 
                 # Faster refresh rate for smooth UI (1s instead of 2s)
                 await asyncio.sleep(1)
