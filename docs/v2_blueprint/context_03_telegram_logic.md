@@ -92,15 +92,29 @@ We strictly separate **Administrative Logic** from **Heavy Transfer Logic** to p
   Processes files via two simultaneous logic paths:
   1.  **Stream Path:** Extracts video for streaming.
   2.  **Zip Path:** Creates a `.7z` archive (no compression) for "Season Packs" upload.
+    
 - [ ] **Crowdsourced Ingestion Engine**
   Public mode accepting user links/torrents into a "Quarantine/Dump Channel". Files remain pending until Admin clicks "Approve".
 *   **Optimization Rule (Zero-Bandwidth Forwarding):**
         *   When delivering the file to the user's DM (after upload to Log Channel), the bot **MUST** use the Telegram `send_document(file_id=...)` method using the generated File ID.
         *   **Constraint:** Do NOT re-upload the file bytes to the user. This ensures 0% bandwidth usage for the delivery leg.
+    
 - [ ] **Manual Cache Health Probe (`/health`)**
   *   **Feature:** Command listener handles `/health` trigger from Log Channel.
   *   **Logic:** Upon receiving the message, Pyrogram internally captures and caches the Channel's Access Hash.
   *   **Usage:** Mandatory manual step if a worker gets "Peer ID Invalid" errors on a fresh container deployment.
+
+- [ ] **"Ani-Cli" Fallback Scraper**
+  *   **Integration:** Worker container includes the `ani-cli` bash script (cloned from repo).
+  *   **Usage:** If `yt-dlp` fails on specific Anime Sites (Gogo/Zoro), the Worker executes `ani-cli -e -q 1080 <query>` to extract the raw `.m3u8` stream link.
+*   **Command Pattern:**
+`ani-cli --no-detach --quality best --episode 5 "One Piece"`
+    *   `--no-detach`: Keeps the process attached so Python can read the output.
+    *   `--quality best`: Skips the quality selection menu.
+  *   **Pipeline:**
+      1.  Ani-Cli gets the Master URL.
+      2.  Passes URL to `aria2c` or `ffmpeg`.
+      3.  File downloaded -> Uploaded to Telegram.
     
 - [ ] **Multi-Source Mirroring**
   Simultaneously uploads copies to Backup Hosts (Abyss.to / StreamWish) to create a RAID-1 redundancy layer in case of Telegram bans.
@@ -132,6 +146,12 @@ We strictly separate **Administrative Logic** from **Heavy Transfer Logic** to p
       3.  Manager sends "Remote Upload" commands to **VidHide**, **StreamTape**, and **FileLions** APIs.
   *   **Result:** The files propagate to 3 different streaming hosts using *their* bandwidth, not yours.
   *   **Storage:** Saves the generated Iframe URLs to the Database.
+
+### 🗄️ Archive Capabilities (Rclone Integration)
+- [ ] **The "Cloud Bridge":**
+  *   Worker container includes `rclone` binary.
+  *   **Capabilities:** Can push downloaded files to any supported Rclone provider (Mega/Drive/OneDrive) via the Admin Panel command.
+  *   **Configuration:** Reads `rclone.conf` generated dynamically by the Manager Bot (Admin uploads config -> Manager saves to volume -> Worker reads volume).
 
 ### 🎞️ Processing Logic
 - [ ] **Subtitle Stream Prober**

@@ -120,4 +120,23 @@ The system runs as isolated containers communicating on an internal bridge netwo
     *   Development happens directly on the Oracle VPS via SSH Tunnel.
     *   Ensures identical environment for FFmpeg/Network testing.
 
+### 🚑 Storage Connectors (Rclone)
+We use **Rclone** (CLI Tool) as the universal adapter for cloud storage (Mega, Google Drive, Dropbox), distinct from our "Daisy Chain" streaming setup.
+
+**Rclone vs. Daisy Chain Strategy:**
+*   **Daisy Chain (Stream Mirroring):**
+    *   *Tool:* API Calls via Manager.
+    *   *Target:* VidHide, StreamTape, FileLions.
+    *   *Bandwidth Cost:* **$0 (Zero)**. Relies on Remote URL Upload.
+    *   *Goal:* Active Streaming Embeds.
+*   **Rclone (Backup & Archive):**
+    *   *Tool:* `rclone copy` CLI inside containers.
+    *   *Target:* Mega.nz, Google Drive (Personal), Backblaze.
+    *   *Bandwidth Cost:* **1x Upload**. (Traffic flows Oracle -> Cloud).
+    *   *Goal:* Disaster Recovery (Database dumps) and "Cold Storage" of vital files.
+
+**Disaster Protocol:**
+*   **Nightly:** Cron runs `mongodump`, zips the Database + Session Files + Env.
+*   **Action:** Uses Rclone to push this zip to a secure "Off-Site" cloud (e.g., a free 20GB Mega account).
+*   **Recovery:** If Oracle deletes the instance, we pull this zip from Mega to a new server to restore operations instantly.
 ---

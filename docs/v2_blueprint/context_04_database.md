@@ -11,7 +11,7 @@
 ```json
 {
   "_id": "tmdb_299534",             // Primary Key
-  "short_id": "v7K1wP2",            // 7-character Base62 Slug
+  "short_id": "v7K1wP2",          // 7-character Base62 Slug
   "media_type": "movie",            // movie | series | manga
   "title": "Avengers: Endgame",
   "clean_title": "avengers endgame",

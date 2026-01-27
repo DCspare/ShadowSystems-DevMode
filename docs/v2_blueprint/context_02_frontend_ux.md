@@ -28,10 +28,14 @@
   Full-width Backdrop Glow. Metadata Pills (Rating, Year). **Quality Preview Gallery** (FFmpeg Screenshots) carousel to prove video quality.
 - [ ] **The Player**
   Distraction-free "Cinema Mode". Overlay controls for Audio/Subtitle switching.
-- [ ] **User Dashboard**
+- [ ] **User Dashboard ("The Void" Profile)**
   - **History Tab:** Synced Watch Progress.
   - **Wishlist Tab:** Status of requested movies.
   - **Referral Widget:** "Invite 3 friends to unlock 4K" progress bar + unique invite link copy button.
+  - **Activity Heatmap:** Github-style "Green/Cyan Dot" calendar showing daily watch/read consistency over the last year.
+  - **Genre DNA:** Doughnut chart analyzing the user's library ("70% Shonen", "30% Horror").
+  - **History/Wishlist:** Tabbed access to data.
+  - **Referral Widget:** Integrated here.
 
 *   **Feature:** **Resolution Badges.**
 *   **Logic:** The UI should scan the `files` array in MongoDB. If it finds both `1080p` and `720p`, it should display little "HD" and "SD" tags on the movie poster.
@@ -88,6 +92,11 @@
         1.  **Skip Intro Button:** Positioned bottom-right (Time-gated).
         2.  **Status Pills:** "Buffering..." / "Optimizing..." notifications (Top-right).
         3.  **Watermark:** Subtle "Shadow Systems" logo in top-left.
+        4.  **Episode Drawer:**
+            *   **Trigger:** A "Playlist" icon in the controls.
+            *   **UI:** Slides in a Glass Panel from the right side (occupying 20% width).
+            *   **Content:** Vertical list of episodes for the current Season.
+            *   **Goal:** Seamless binge-watching; switching episodes without exiting Fullscreen/Immersive mode.
 
 - [ ] **Standard Features (Enabled):**
     *   **Mobile:** Double-tap seek, Long-press 2x speed, Swipe Volume/Brightness.
@@ -103,7 +112,7 @@
   Automated error handling logic in the player:
   1.  **Direct Play:** Attempts passthrough streaming (Lowest Latency).
   2.  **Auto-Remux:** If `MediaError` detected (e.g., MKV format), auto-reloads stream with `?mode=remux`.
-  3.  **External Intent (VLC):** If codecs fail (e.g., x265 on old device), displays a **"Play in VLC"** button triggering the native URI scheme (`vlc://...` or `intent://...`).
+  3.  **External Intent (VLC):** If codecs fail (e.g., x265 on old device), displays a **"Play in VLC"** button triggering the native URI scheme (`vlc://...` or `intent://...`). Check section 2F (Ani-Cli Protocol) below 👇🏼 
   4. **Transparent Status Messages (UX)**
   *   **Scenario:** Player is waiting for VAST Ad or buffering the main file.
     
@@ -170,6 +179,24 @@
   *   **UI:** Show a "Glass Toast" with a [REFRESH] button when a new build is detected in the background.
   *   **Logic:** `workbox.messageSkipWaiting()` to force the new cache to take over immediately upon click.
 
+### F. The "Ani-Cli" Protocol Engine (External Intents)
+*Goal: Replicate the `ani-cli` experience by offloading playback/downloading to native OS apps via deep links.*
+
+**1. Watch External (Deep Linking)**
+*   **Menu:** "Play External" option in the Player Settings.
+*   **Protocols Supported:**
+    *   **Android (Universal):** `intent:{url}#Intent;type=video/*;scheme=https;end` (Prompts user to pick VLC, MX, MPV).
+    *   **VLC Mobile:** `vlc://{url}`
+    *   **MPV Android:** `mpv://{url}`
+*   **Why:** Solves the "Format Error" on mobile web. Native players handle HEVC/10-bit instantly.
+
+**2. External Downloader Support (HLS Handler)**
+*   **Menu:** "Download Stream (m3u8)" button on Archive/Player page.
+*   **Context:** Web browsers cannot save `.m3u8` streams. Download Managers can.
+*   **Target Apps:**
+    *   **1DM (IDM Mobile):** `intent:{url}#Intent;package=idm.internet.download.manager;end`
+    *   **ADM (Advanced DM):** `intent:{url}#Intent;package=com.dv.adm;end`
+*   **Desktop Logic:** Copy Link to Clipboard + Toast Message: *"Paste this into IDM/JDownloader"*.
 ---
 
 ## 🔒 3. Obfuscation & Security
@@ -268,6 +295,9 @@
     *   **Behavior:** Auto-hides when scrolling *down* content, reappears on scroll *up* to maximize screen real estate.
     *   **Slots (5 Max):** `Home | Search | Schedule | Audio | Profile`.
     *   **The "Profile" Tab:** Acts as the menu wrapper. Clicking it opens a Sheet with Settings, Wishlist, Franchise Admin Link, and Login/Logout.
+    *   **Notification Center:**
+    *   **UI:** Popover panel showing "History" of alerts (New Episodes, Request Status, System Alerts).
+    *   **Data Source:** Persisted in MongoDB User object (`user.notifications`).
 
 ### B. Dashboard "Bento Grid" System
 *   **Desktop:** Asymmetric CSS Grid (Big Blocks + Tall Sidebars).
@@ -293,24 +323,38 @@
     *   **Mini-Player:** A thin 60px bar *floating 10px above* the Bottom Nav.
     *   **Interaction:** Swipe Down to hide, Tap to expand to Full-Screen "Cover Art + Lyrics Mode".
 
-### G. Global Interaction States ("Zen Mode")
+### E. Global Interaction States ("Zen Mode")
 *   **Context:** Reading Manga or Watching Video on Mobile.
 *   **Behavior:**
     *   **Input:** Single Tap on screen center.
     *   **Reaction:** Instantly slides **Navigation Bars (Top & Bottom)** away off-screen.
     *   **Goal:** True 100% full-screen consumption without UI distractions.
 
-### H. The "Schedule" Calendar
+### F. The "Schedule" Calendar
 *   **Desktop:** Full 7-Day Grid View (Horizontal days, Vertical time).
 *   **Mobile:** 
     *   **Default:** Shows "Today's" episodes only as a list.
     *   **Interaction:** Horizontal Day Picker (Mon | Tue | Wed) sticky at the top to switch lists.
  
-### I. Search & Filter UX
+### G. Search & Filter UX
 *   **Desktop:** Global Search Input in Sidebar or Top Right. Filters (Genre, Year) appear as sidebar or modal.
 *   **Mobile:** 
     *   **Search:** Dedicated Tab in Bottom Nav.
     *   **Filtering:** "Chip Scroller" at the top (`[Action] [Adventure] [New]`).
+
+### H. Power-User Features (Native Feel)
+- [ ] **Omni-Search Command Palette (`Ctrl+K`)**
+  *   **UI:** Centralized "Spotlight-style" modal. Background blurs.
+  *   **Scope:** Hybrid search combining:
+      *   **Content:** (Movies, Manga, Characters).
+      *   **Navigation:** ("Go to Settings", "Open Schedule").
+      *   **Actions:** ("Theme: Dark", "Audio: Mute").
+  *   **Tech:** Uses `cmdk` (React Component) for instant, accessible keyboard control.
+
+- [ ] **Library View Toggle (Grid vs List)**
+  *   **Context:** Any "List" page (My List, Search Results, Schedule).
+  *   **UI:** Toggle switch in the filter bar `[ ▦ Grid ]` / `[ ☰ List ]`.
+  *   **List View Mode:** Displays metadata in columns (Rating, Year, Episodes, Progress Bar) for compact density. Useful for power users managing large collections.
 
 ------
 

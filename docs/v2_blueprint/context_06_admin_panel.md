@@ -117,6 +117,11 @@ Unlike the public facing "Cinematic" UI, the Admin Panel focuses on **Data Densi
 
 > (You don't need to regenerate files for this; just keeping it in mind ensures you build a "Control Panel" that saves you from SSHing into the server every month).
 
+*   **Config Loader (Rclone):**
+    *   **UI:** A "Paste Config" text area for the contents of `rclone.conf`.
+    *   **Backend:** Writes this content to the shared `/app/config/rclone.conf` file used by the Worker Swarm and Manager.
+    *   **Status Check:** Button to run `rclone listremotes` to verify connection to the Backup Drive (e.g., Mega).
+
 ### G. Franchise Master Control (B2B CRM)
 *Management interface for the "Shadow Systems" business side.*
 *   **Tenant Overview Grid:**
