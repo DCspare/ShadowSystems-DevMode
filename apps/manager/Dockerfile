@@ -1,3 +1,4 @@
+# apps/manager/DockerFile
 # Optimized for Oracle/Ampere (ARM64) and IDX
 FROM python:3.10-slim
 

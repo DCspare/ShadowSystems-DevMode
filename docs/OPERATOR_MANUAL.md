@@ -141,8 +141,15 @@ git add .
 git commit -m "feat: content ingestion router and database text indexing"
 
 # --- REMOTE BACKUP ---
-# Push logic to the main branch on GitHub
+# Push branch to the remote repo
 git push origin main
+
+OR
+
+# git push -u origin feat/shared-downloader
+# -u is short form for --set-upstream flag
+git switch main
+git push -u origin <branch-name>
 
 # --- VERSIONING ---
 # Example 1: Tag current state as functional core
