@@ -337,17 +337,78 @@ curl -X POST http://localhost:8080/api/library/sign \
   -H "Content-Type: application/json" \
   -H "X-Shadow-Secret: shadow_super_secret_dev_key" \
   -d '{
-    "short_id": "abb276a", 
-    "file_id": "BQACAg..." 
+    "short_id": "8fb8c22", 
+    "file_id": "BQACAgUAAyEGAATEUt8iAAICUWl4fqISaCqr8pOBGwuM_aXDeh6YAAIYIAACbFDBVx5Bhi6nqsCcHgQ" 
   }'
 ```
+#### ✅ Expected Output
+You should see a JSON response like this:
 
-#### 2. Nuking a Movie (DELETE)
+```json
+{"status":"signed","stream_url":"/stream/BQACAgUAAyEGAATEUt8iAAICUWl4fqISaCqr8pOBGwuM_aXDeh6YAAIYIAACbFDBVx5Bhi6nqsCcHgQ?token=IelijU9Xj6uYj0kX2igFBQ&expires=1769867545","expires_in":14400}
+```
+
+#### 2. Generating a User ID and Session Token.
+```bash
+curl -X POST "http://localhost:8080/api/auth/guest" \
+  -H "Content-Type: application/json" \
+  -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```
+#### ✅ Expected Output
+You should see a JSON response like this:
+
+```json
+{"status":"registered","user_id":"guest_19808686-e32","role":"guest"}
+```
+
+--- 
+
+```bash
+curl -I -X POST "http://localhost:8080/api/auth/guest" \
+  -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```
+#### ✅ Expected Output
+You should see a JSON response like this:
+
+```json
+HTTP/1.1 200 OK
+Server: nginx/1.29.4
+Date: Sat, 31 Jan 2026 09:45:54 GMT
+Content-Type: application/json
+Content-Length: 69
+Connection: keep-alive
+set-cookie: shadow_session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJndWVzdF9kZTdlMjUwMy04YzYiLCJyb2xlIjoiZnJlZSIsImV4cCI6MTc3MDQ1NzU1NH0.eHFhtPPFLiSMe0pWiPhSyC-GtuUvxAxwRVIBSPJpqCQ; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax; Secure
+```
+
+#### 2a. Nuking a whole Movie Entry (DELETE)
 Used to forcefully remove an entry if the UI is inaccessible.
 
 ```bash
 curl -X DELETE http://localhost:8080/api/library/delete/106379 \
   -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```
+#### 2a. Nuking a whole Movie Entry (DELETE)
+*Goal: Remove a file link without deleting the movie meta.*
+
+You need a `tmdb_id` that exists in your database.
+1. First, list content to find an ID:
+```bash
+curl "http://localhost:8080/api/library/list?limit=1"
+```
+2. Note the `tmdb_id` and the `telegram_id` inside the `files` array.
+3. Run the deletion:
+```bash
+# Replace 12345 with real TMDB ID
+# Replace ABC_FILE_ID with the telegram file ID from step 1
+curl -X DELETE "http://localhost:8080/api/library/remove_file/27205?file_id=BQACAgUAAyEGAATEUt8iAAMmaVzP5IoxCLzligtMG4NT6CJp0yQAAiIgAAJZ8-lWPPRyYh_Bgo8eBA&season=0" \
+     -H "X-Shadow-Secret: shadow_super_secret_dev_key"
+```
+
+#### ✅ Expected Output
+You should see a JSON response like this:
+
+```json
+{"status":"removed","tmdb_id":27205,"removed_file":"BQACAgUAAyEGAATEUt8iAANeaV-STmhAr8NXLUncdzQHm7bKLKsAAiIaAAIkSwABV0udxlpUmKfNHgQ"}
 ```
 
 #### 3. Triggering a Remote Ingest (Leech via API)
@@ -357,3 +418,29 @@ Used to automate uploads from external scripts without using Telegram.
 curl -X POST http://localhost:8080/api/attach_file/550?file_path=/path/to/movie.mkv \
   -H "X-Shadow-Secret: shadow_super_secret_dev_key"
 ```
+
+### 🧪 How to Test On-the-Fly Subtitle Extractor (No Frontend Needed)
+
+1.  **Find a file with subs:**
+    Check your library list and find a `file_id` that has a `subtitles` array with an index (e.g., `index: 2`).
+    `curl http://localhost:8080/api/library/list`
+
+2.  **Run the Request:**
+    Replace `FILE_ID` and `INDEX` with real values from your DB.
+    ```bash
+    curl -i "http://localhost:8080/api/library/subtitle/FILE_ID/INDEX.vtt"
+    ```
+e.g. 
+```bash
+curl -i "http://localhost:8080/api/library/subtitle/BQACAgUAAyEGAATEUt8iAAICfWl4sX7-f3Ikpw-ndui3dnEQwOVoAALAGgACbFDJV5xcngvvRrMWHgQ/3.vtt"
+OR 
+curl -i "http://localhost:8080/api/library/subtitle/BQACAgUAAyEGAATEUt8iAAICdWl4rV8gjozmM6JvMHjb4TusrF5EAAKxGgACbFDJV-Sy-MW8xQwOHgQ/4.vtt" -o sub.txt # To Save the output in a file
+```
+
+3.  **What to look for:**
+    *   The `Content-Type` header should be `text/vtt`.
+    *   The first line of the output MUST be `WEBVTT`.
+    *   Followed by timestamps like `00:00:10.000 --> 00:00:15.000`.
+#### ✅ Expected Output
+You should see a response like this file:
+[Subtitle Output](../sub.txt)

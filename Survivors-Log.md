@@ -234,3 +234,13 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 *   **The Error:** `update only works with $ operators`.
 *   **Description:** Bash Heredocs (`cat <<EOF`) attempted to expand `$push` and `$set` as shell variables, resulting in empty strings being written to the Python file.
 *   **The Fix:** Switched to **Quoted Heredocs** (`cat <<'EOF'`) to treat the input as a raw string, preserving the MongoDB operator syntax inside the container.
+
+#### 🧱 Hurdle #40: The Internal Header Bridge
+- **The Error:** `HTTP 400 Bad Request` or `500 Internal Error` when calling subtitles.
+- **Description:** The Manager API (Python) tried to call the Go Stream Engine directly. However, the Go Engine requires `X-Location-Msg-ID` headers to find the Telegram file. Since the browser doesn't send these, the request failed.
+- **The Fix:** Implemented a "Smart Resolver" in `library.py`. The Manager now fetches the location data from MongoDB first, then injects those headers into the `subprocess.Popen` FFmpeg command via the `-headers` flag.
+
+#### 🧱 Hurdle #41: FastAPI Type-Strictness (Parsing Fail)
+- **The Error:** `HTTP 422 Unprocessable Entity`.
+- **Description:** A request to `/subtitle/{file_id}/index3.vtt` failed because the route expected an `int` for the index. The string "index3" could not be cast to an integer.
+- **The Fix:** Corrected the frontend/CURL calling pattern to pass only the integer (e.g., `/subtitle/{file_id}/3.vtt`). Strictly enforced integer type-hinting in FastAPI to prevent command injection.

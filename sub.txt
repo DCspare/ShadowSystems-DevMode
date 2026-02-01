@@ -1,0 +1,2308 @@
+HTTP/1.1 200 OK
+Server: nginx/1.29.4
+Date: Sun, 01 Feb 2026 06:15:04 GMT
+Content-Type: text/vtt; charset=utf-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+
+WEBVTT
+
+00:05.213 --> 00:06.715
+[rain falling]
+
+00:09.676 --> 00:11.636
+[horse neighing]
+
+00:12.887 --> 00:14.889
+[Dunk grunting]
+
+00:26.067 --> 00:28.069
+[distant thunder rumbling]
+
+00:33.408 --> 00:35.035
+- [whispering] Hey.
+- [horse nickering]
+
+00:38.371 --> 00:39.873
+[grunting]
+
+00:46.880 --> 00:49.883
+- [thunder rumbling]
+- [horse neighing]
+
+00:51.634 --> 00:52.635
+[grunting]
+
+00:56.222 --> 00:57.515
+[sighs]
+
+01:02.270 --> 01:04.022
+I don't know the right words.
+
+01:06.608 --> 01:08.151
+Ought to be a septon here.
+
+01:14.908 --> 01:16.284
+You were a true knight.
+
+01:18.411 --> 01:20.204
+You never beat me
+when I didn't deserve it.
+
+01:20.205 --> 01:21.371
+[shouting]
+
+01:21.372 --> 01:22.874
+- Fuck.
+- [grunting]
+
+01:23.917 --> 01:25.834
+Except that time
+in Maidenpool.
+
+01:25.835 --> 01:27.837
+[thunder rumbling]
+
+01:29.089 --> 01:31.174
+It was the inn boy
+ate the widow woman's pie.
+
+01:32.926 --> 01:35.219
+Not me. I told you.
+
+01:35.220 --> 01:36.345
+[rooster crowing]
+
+01:36.346 --> 01:38.098
+Why, you...
+[grunting]
+
+01:39.724 --> 01:40.892
+[sniffing]
+
+01:44.229 --> 01:45.688
+Doesn't matter now.
+
+01:47.607 --> 01:49.609
+[thunder rumbling]
+
+01:52.987 --> 01:54.989
+[exhales sharply]
+
+02:02.288 --> 02:04.581
+I'd leave your sword,
+but it--
+
+02:04.582 --> 02:06.251
+it would only rust
+in the ground.
+
+02:08.795 --> 02:10.255
+[sniffing]
+
+02:11.631 --> 02:14.217
+[sobbing]
+I wish you didn't die, ser.
+
+02:18.847 --> 02:20.722
+[whimpering]
+
+02:20.723 --> 02:22.600
+I'll take good care
+of the horses.
+
+02:26.896 --> 02:28.939
+[distant sheep bleating]
+
+02:28.940 --> 02:30.400
+[horse nickering]
+
+02:32.068 --> 02:34.070
+[birdsong]
+
+02:37.657 --> 02:40.450
+Eat like a king
+if I sold you three.
+
+02:40.451 --> 02:42.411
+[horse neighing]
+
+02:42.412 --> 02:44.205
+For a year or two.
+
+02:45.623 --> 02:47.625
+- Then what?
+- [horse neighing]
+
+02:51.462 --> 02:54.215
+That road ends in outlawry
+or beggary.
+
+02:55.884 --> 02:58.344
+[wind whistling]
+
+03:04.309 --> 03:06.018
+We could go to a city.
+
+03:06.019 --> 03:08.062
+[horse nickering]
+
+03:09.480 --> 03:11.690
+King's Landing?
+Lannisport?
+
+03:11.691 --> 03:12.942
+[horse huffing]
+
+03:25.830 --> 03:27.122
+Could join the City Watch.
+
+03:27.123 --> 03:29.125
+[horses snorting, nickering]
+
+03:32.670 --> 03:34.172
+Stop raping, ser.
+
+03:39.677 --> 03:41.679
+[horse neighing]
+
+03:45.433 --> 03:47.560
+Fits my grip
+as well as it ever fit his.
+
+03:48.603 --> 03:50.605
+[wind intensifying]
+
+03:53.107 --> 03:54.984
+And there is a tourney
+at Ashford Meadow.
+
+04:02.867 --> 04:05.870
+[♪ dramatic theme playing]
+
+04:11.501 --> 04:13.544
+- [wet splatting]
+- [relieving sighs]
+
+04:15.004 --> 04:17.006
+[continues sighing]
+
+04:23.137 --> 04:25.139
+[bird chirping]
+
+04:28.685 --> 04:30.687
+[chirping continues]
+
+04:33.606 --> 04:35.274
+[grunting]
+
+04:35.275 --> 04:38.319
+[♪ melancholy music playing]
+
+04:47.120 --> 04:49.330
+[horse nickering]
+
+05:16.733 --> 05:17.984
+[dog barking]
+
+05:23.614 --> 05:25.616
+[crows cawing]
+
+05:27.452 --> 05:29.829
+Hello there.
+Are you the stableboy?
+
+05:34.667 --> 05:37.169
+I want the palfrey
+rubbed down.
+
+05:37.170 --> 05:39.671
+And oats for all three.
+You tend to them?
+
+05:39.672 --> 05:42.591
+I could, if I wanted.
+
+05:42.592 --> 05:44.593
+[Dunk] None of that.
+See to the horses.
+
+05:44.594 --> 05:47.055
+You'll get a copper
+if you do well,
+and a clout in the ear if not.
+
+05:50.600 --> 05:52.602
+[liquid bubbling]
+
+05:54.312 --> 05:55.605
+[door opens]
+
+05:56.898 --> 05:57.899
+[pots clanging]
+
+05:58.649 --> 05:59.650
+Sit where you like.
+
+06:00.610 --> 06:02.612
+[pots continue clanging]
+
+06:12.038 --> 06:14.122
+There's good lamb
+roasted with a crust of herbs
+
+06:14.123 --> 06:16.709
+and some ducks
+my son shot down.
+Which will you have?
+
+06:18.044 --> 06:19.127
+Both.
+
+06:19.128 --> 06:21.338
+[laughing]
+
+06:21.339 --> 06:22.924
+You're big enough for it.
+
+06:28.679 --> 06:30.181
+[chair scraping]
+
+06:32.767 --> 06:33.810
+[clears throat]
+
+06:34.352 --> 06:36.687
+- How much farther to Ashford?
+- Day's ride.
+
+06:39.023 --> 06:41.359
+Is my boy seeing to your horses
+or has he run off again?
+
+06:42.527 --> 06:44.069
+[sniffing]
+No, he's there.
+
+06:44.070 --> 06:45.862
+Half the town's
+gone down the tourney.
+
+06:45.863 --> 06:47.572
+Mine would, too,
+if I allowed it.
+
+06:47.573 --> 06:49.741
+[chuckles] I swear,
+I couldn't tell you why.
+
+06:49.742 --> 06:51.994
+Knights are built the same
+as other men.
+
+06:53.037 --> 06:55.748
+And I never knew a joust
+to change the price of eggs.
+
+06:58.501 --> 07:00.669
+Bound for
+the tourney yourself?
+
+07:00.670 --> 07:02.088
+[guest] I dreamed of you.
+
+07:09.011 --> 07:11.722
+Stay the fuck away from me.
+You hear?
+
+07:13.307 --> 07:14.350
+My lord?
+
+07:22.692 --> 07:23.693
+[blows forcefully]
+
+07:29.657 --> 07:31.659
+- [heavy footfall]
+- [stairs creaking]
+
+07:36.539 --> 07:38.206
+[coins jingling]
+
+07:38.207 --> 07:39.708
+Never you mind
+that one, ser.
+
+07:39.709 --> 07:41.169
+I'll see about your food.
+
+07:45.423 --> 07:47.424
+- [door closes]
+- [dog barking]
+
+07:47.425 --> 07:49.384
+[horse whinnying]
+
+07:49.385 --> 07:53.221
+- [stableboy] Hiya!
+Take that! Yah!
+- [horse neighing]
+
+07:53.222 --> 07:56.933
+[vocalizing]
+
+07:56.934 --> 07:59.561
+- Oi!
+- [gasps] My lord.
+
+07:59.562 --> 08:02.647
+- You thief!
+- I-- I did not mean
+to offend you.
+
+08:02.648 --> 08:05.108
+Take that armor off you.
+Now!
+
+08:05.109 --> 08:08.653
+And be glad Thunder
+didn't kick you
+in that fool head of yours.
+
+08:08.654 --> 08:10.489
+He's a war horse,
+not a boy's pony.
+
+08:10.490 --> 08:12.282
+I could ride him
+as well as you.
+
+08:12.283 --> 08:14.494
+- [horse huffing]
+- Close your insolent mouth.
+
+08:15.161 --> 08:15.995
+I--
+
+08:16.496 --> 08:18.497
+I'm a knight,
+I'll have you know.
+
+08:18.498 --> 08:20.208
+You don't look
+to be a knight.
+
+08:21.292 --> 08:24.252
+- What, all knights look
+the same, do they?
+- No.
+
+08:24.253 --> 08:26.172
+But they don't look
+like you either.
+
+08:27.298 --> 08:28.591
+Your belt's made of rope.
+
+08:29.967 --> 08:32.511
+So long as it holds
+my scabbard, it serves.
+
+08:32.512 --> 08:34.304
+Are you going
+to the tourney, then?
+
+08:34.305 --> 08:35.932
+Do you mean to enter the lists?
+
+08:36.933 --> 08:38.266
+Yeah, I suppose I do.
+
+08:38.267 --> 08:41.269
+Take me with you, ser.
+Please.
+
+08:41.270 --> 08:43.104
+And what might
+your mother say to that?
+
+08:43.105 --> 08:44.481
+Not much.
+
+08:44.482 --> 08:45.941
+- She's dead.
+- [scoffs]
+
+08:45.942 --> 08:47.818
+Is the innkeeper not your...
+
+08:50.613 --> 08:52.030
+You're an orphan boy.
+
+08:52.031 --> 08:53.074
+Are you?
+
+08:54.534 --> 08:56.410
+I was. Once.
+
+08:57.161 --> 08:59.372
+Till my ser took me in.
+
+09:00.915 --> 09:02.708
+Taught me arms
+and riding, and...
+
+09:04.252 --> 09:06.379
+and taught me
+everything, really.
+[chuckles softly]
+
+09:07.588 --> 09:09.464
+- Best he could.
+- [horse nickering]
+
+09:09.465 --> 09:11.800
+If you could bring me
+to Ashford,
+
+09:11.801 --> 09:13.176
+I could squire for you, ser.
+
+09:13.177 --> 09:15.971
+- [sighs]
+- And you can teach me
+best you can.
+
+09:15.972 --> 09:18.139
+No, I have no need
+for a squire, lad.
+
+09:18.140 --> 09:19.891
+Every knight needs a squire.
+
+09:19.892 --> 09:22.687
+And you look like you need one
+more than most.
+
+09:25.398 --> 09:27.358
+And you look like you need
+a good clout in the ear.
+
+09:28.734 --> 09:29.985
+Fill me a sack of oats.
+
+09:29.986 --> 09:32.238
+I'm off for Ashford.
+Alone.
+
+09:38.411 --> 09:41.830
+Look, lad, I promise you...
+
+09:41.831 --> 09:44.166
+you're better off not squiring
+for the likes of me.
+
+09:52.258 --> 09:53.467
+- For your help.
+- [coin pings]
+
+09:54.760 --> 09:56.678
+- [dog barking in distance]
+- [Dunk scoffs]
+
+09:56.679 --> 09:58.013
+Sulk all you wish.
+
+09:58.014 --> 10:00.015
+I know you'll scoop it up
+as soon as I'm gone.
+
+10:00.016 --> 10:01.517
+[horse nickering]
+
+10:05.271 --> 10:08.274
+[♪ soft music playing]
+
+10:46.103 --> 10:48.605
+- [horse neighing]
+- [people chattering in distance]
+
+10:48.606 --> 10:51.651
+[♪ inspiring music playing]
+
+10:59.825 --> 11:01.785
+[people chattering]
+
+11:01.786 --> 11:04.830
+♪
+
+11:41.367 --> 11:42.576
+Sorry.
+
+11:46.956 --> 11:49.666
+[soldier speaking indistinctly]
+
+11:49.667 --> 11:51.167
+- Piss off.
+- [soldiers laughing]
+
+11:51.168 --> 11:52.461
+Beg pardon, men.
+
+11:54.338 --> 11:56.465
+I wish to speak
+to the master of the games.
+
+12:00.761 --> 12:03.180
+[children grunting]
+
+12:04.724 --> 12:06.349
+- [head thuds]
+- Oh!
+
+12:06.350 --> 12:08.644
+- [children continue playing]
+- What do you want, man?
+
+12:10.271 --> 12:11.521
+[child] Got you again!
+
+12:11.522 --> 12:14.024
+I, uh, came for the tourney.
+
+12:15.192 --> 12:18.027
+My lord's tourney
+is a contest for knights.
+
+12:18.028 --> 12:19.487
+- You a knight?
+- Hyah!
+
+12:19.488 --> 12:21.574
+Oi! Psst!
+
+12:25.703 --> 12:27.037
+A knight with a name, mayhaps?
+
+12:27.830 --> 12:29.623
+Uh, Dunk.
+
+12:31.125 --> 12:33.668
+Ser Dunk.
+
+12:33.669 --> 12:37.465
+I-- I was squire
+to Ser Arlan of Pennytree
+since I was a boy.
+
+12:38.549 --> 12:41.761
+He knighted me before he passed,
+with his own sword.
+
+12:45.890 --> 12:48.100
+That's his penny there
+in the hilt.
+
+12:50.478 --> 12:52.980
+Well, a sword it is
+for a certainty.
+
+12:54.190 --> 12:56.107
+But I've never heard
+of this Arlan of Pennytree.
+
+12:56.108 --> 12:57.525
+You were his squire,
+you say?
+
+12:57.526 --> 12:59.945
+He always meant for me
+to be a knight one day...
+
+13:01.113 --> 13:02.156
+as he was.
+
+13:03.157 --> 13:04.867
+Am I to be a knight
+one day, ser?
+
+13:05.910 --> 13:08.203
+- As you are?
+- [sheep bleating]
+
+13:08.204 --> 13:09.371
+[spitting]
+
+13:12.333 --> 13:15.084
+When he was dying,
+he called for his longsword
+
+13:15.085 --> 13:16.378
+and bade me kneel.
+
+13:17.713 --> 13:19.215
+Charged me
+to be a good knight.
+
+13:20.132 --> 13:22.009
+- [insect buzzing]
+- To defend the weak
+and the innocent.
+
+13:23.552 --> 13:25.553
+Serve the realm
+with all my might.
+
+13:25.554 --> 13:27.096
+And I swore that I would.
+
+13:27.097 --> 13:29.141
+[snorting, hocking
+loudly]
+
+13:30.518 --> 13:31.560
+[spitting]
+
+13:32.645 --> 13:35.063
+Any knight can make a knight,
+it's true.
+
+13:35.064 --> 13:38.275
+Were there witnesses
+to your dubbing?
+
+13:38.859 --> 13:41.362
+Only a robin in a thorn tree.
+[chuckles]
+
+13:44.615 --> 13:46.242
+This is Ashford town, lad.
+
+13:47.576 --> 13:50.538
+Know what comes to men here
+who pretend at sacred oaths?
+
+13:51.080 --> 13:52.747
+- I'm-- I'm not--
+- We hang you
+
+13:52.748 --> 13:55.292
+naked by your hands
+and your feet...
+
+13:56.293 --> 13:59.754
+lower you down asshole first
+onto a sharpened point
+
+13:59.755 --> 14:01.340
+and fuck you dry.
+
+14:02.091 --> 14:05.343
+Call it the Ashford chair.
+So, I ask you again.
+
+14:05.344 --> 14:06.845
+Were there witnesses
+to your dubbing
+
+14:06.846 --> 14:08.722
+besides a fuckin' songbird?
+
+14:10.140 --> 14:14.602
+Well, the--
+see, it was raining.
+
+14:14.603 --> 14:17.189
+- Uh--
+- I'm bullshitting you.
+
+14:17.731 --> 14:18.732
+[laughing]
+
+14:20.192 --> 14:21.693
+[chuckles nervously]
+
+14:21.694 --> 14:22.987
+"Ashford chair."
+
+14:24.029 --> 14:25.488
+You take a boot to the head?
+
+14:25.489 --> 14:27.615
+This is the Reach,
+not the Riverlands.
+
+14:27.616 --> 14:29.701
+- "Ashford chair." [chuckles]
+- Think we're fending off
+
+14:29.702 --> 14:31.619
+some scourge of cottagers,
+scuttling about,
+
+14:31.620 --> 14:33.204
+entering tourneys?
+
+14:33.205 --> 14:35.999
+[snorting, hocking
+loudly]
+
+14:36.000 --> 14:38.960
+You'd need coin.
+[spitting] Armor.
+
+14:38.961 --> 14:40.461
+Horses. Men.
+
+14:40.462 --> 14:43.006
+Training,
+gods be good.
+
+14:43.007 --> 14:44.841
+Imagine the poor farmer
+charging down
+
+14:44.842 --> 14:46.676
+Lyonel Baratheon
+in the lists.
+
+14:46.677 --> 14:48.177
+Mm, that would be--
+
+14:48.178 --> 14:49.721
+A different sort
+of entertainment.
+
+14:49.722 --> 14:52.682
+Mm. Well, I'm no farmer.
+
+14:52.683 --> 14:54.268
+Yet you've come
+dressed as one.
+
+14:57.187 --> 15:00.189
+Look, man,
+my Lord Ashford
+
+15:00.190 --> 15:03.568
+fancies himself of great import.
+Gods know why.
+
+15:03.569 --> 15:06.029
+Well, that means
+I'm to ward off
+every landed knight
+
+15:06.030 --> 15:07.864
+and sellsword
+vying to challenge.
+
+15:07.865 --> 15:10.200
+You understand?
+There are princes about.
+
+15:12.077 --> 15:13.287
+No, of course.
+
+15:15.915 --> 15:17.917
+[swords clanging in distance]
+
+15:21.795 --> 15:22.922
+Your late master.
+
+15:25.633 --> 15:27.760
+He'll be known
+to the true knights
+here assembled?
+
+15:28.886 --> 15:31.012
+There was a pavilion
+
+15:31.013 --> 15:33.014
+flying the banner
+of House Dondarrion.
+
+15:33.015 --> 15:34.891
+Aye, Ser Manfred of that house.
+
+15:34.892 --> 15:36.684
+Ser Arlan served
+his lord father in Dorne
+
+15:36.685 --> 15:38.019
+a few years past.
+
+15:38.020 --> 15:39.687
+Ser Manfred
+will remember us.
+
+15:39.688 --> 15:41.940
+By scent alone, no doubt.
+
+15:41.941 --> 15:44.525
+If he'll speak
+to your good honor,
+bring him here with you
+
+15:44.526 --> 15:46.194
+before the tourney
+begins on the morrow.
+
+15:46.195 --> 15:47.070
+Leave your escorts behind.
+
+15:47.071 --> 15:48.613
+[insects buzzing]
+
+15:48.614 --> 15:50.282
+- As you say.
+- Aye.
+
+15:53.118 --> 15:55.787
+You are aware that those
+vanquished in tourney
+
+15:55.788 --> 15:57.580
+forfeit their arms,
+armor, and horse
+
+15:57.581 --> 15:59.415
+to the victors,
+and must ransom them back?
+
+15:59.416 --> 16:01.459
+- Aye.
+- And you have coin
+
+16:01.460 --> 16:04.754
+- to pay such ransom?
+- Oh, gods, no.
+
+16:04.755 --> 16:07.716
+I-- I mean,
+I won't have need of coin.
+
+16:10.719 --> 16:12.804
+- [thud]
+- [groaning]
+
+16:12.805 --> 16:14.055
+Seven fu--
+
+16:14.056 --> 16:16.057
+[horse neighing]
+
+16:16.058 --> 16:18.059
+[♪ fiddle playing faintly]
+
+16:18.060 --> 16:20.104
+[people chattering]
+
+16:26.360 --> 16:28.362
+[chatter and laughter]
+
+16:35.411 --> 16:37.329
+- Mind those two. Good girl.
+- [horse nickering]
+
+16:38.330 --> 16:40.332
+[chatter, laughter continue]
+
+16:42.543 --> 16:43.751
+Uh, pardon, sers.
+
+16:43.752 --> 16:45.294
+I-- I need speak
+with Ser Manfred.
+
+16:45.295 --> 16:46.504
+[lordling] [belching]
+Good.
+
+16:46.505 --> 16:49.591
+He's napping, ser.
+Wake him for a stag.
+
+16:50.384 --> 16:51.844
+I, uh... [clearing throat]
+
+16:52.845 --> 16:54.429
+I don't--
+I don't have a stag.
+
+16:54.430 --> 16:56.431
+What kind of knight
+don't got a stag?
+
+16:56.432 --> 16:58.808
+- It's a hedge knight, ain't it?
+- What?
+
+16:58.809 --> 17:01.102
+It's like a knight,
+but sadder.
+
+17:01.103 --> 17:02.687
+No, I'm-- I'm not sad--
+
+17:02.688 --> 17:04.981
+He's gotta sleep in the hedges
+'cause no lord'll have it.
+
+17:04.982 --> 17:07.276
+Aw. That is sad.
+
+17:07.985 --> 17:10.153
+And Ser Manfred's
+fucked its wife, too.
+
+17:10.154 --> 17:13.197
+- No, I-- I don't have a wife.
+- Oh!
+
+17:13.198 --> 17:15.158
+'Cause we're used
+to husbands coming 'round.
+
+17:15.159 --> 17:16.784
+Likes fucking wives,
+that one.
+
+17:16.785 --> 17:18.536
+Near as much
+as he likes fucking us.
+
+17:18.537 --> 17:21.456
+Told me he's on a mission
+to turn the whole world red.
+
+17:21.457 --> 17:24.459
+- Well, we're already red.
+- So we are.
+
+17:24.460 --> 17:27.003
+[both laughing]
+
+17:27.004 --> 17:31.508
+Well, um, when do you expect
+Ser Manfred to wake, then?
+
+17:32.468 --> 17:34.719
+It might wanna try back
+at evenfall.
+
+17:34.720 --> 17:36.138
+Evenfall.
+
+17:39.183 --> 17:40.851
+- Goodbye.
+- Yeah. [clearing throat]
+
+17:41.977 --> 17:44.687
+- Arse.
+- [girls laughing]
+
+17:44.688 --> 17:46.732
+[knights shouting]
+
+17:47.858 --> 17:50.444
+- [horse nickering]
+- Why'd she say that, huh?
+
+17:52.529 --> 17:53.697
+We're not sad.
+
+17:55.532 --> 17:57.158
+[horse neighing]
+
+17:57.159 --> 17:59.827
+Certainly not
+rising-to-the-level-
+of-a-comment sad.
+
+17:59.828 --> 18:01.162
+[horse nickering]
+
+18:01.163 --> 18:03.457
+Besides, Ser Arlan
+always said that...
+
+18:04.625 --> 18:06.877
+a hedge knight
+was the truest kind of knight.
+
+18:08.879 --> 18:11.714
+When we win our first tilt,
+we'll have the loser's armor
+
+18:11.715 --> 18:14.008
+- and horse, or his gold.
+- [horse nickering]
+
+18:14.009 --> 18:16.010
+- [knights shouting]
+- Won't be sad then.
+
+18:16.011 --> 18:18.013
+[grunting]
+
+18:19.598 --> 18:21.266
+[horse neighing]
+
+18:22.851 --> 18:25.479
+I know.
+Said if we <i>did</i> win.
+
+18:27.064 --> 18:28.439
+Look, it's not a crime
+against the king
+
+18:28.440 --> 18:30.191
+to enjoy a nice thought
+for a trice.
+
+18:30.192 --> 18:31.901
+[grunting]
+
+18:31.902 --> 18:34.530
+- [horse neighing]
+- Do not muck about
+with me, Raymun.
+
+18:35.072 --> 18:38.033
+- [groaning]
+- You're a good-for-nothing
+useless rat.
+
+18:42.913 --> 18:43.956
+[grunting]
+
+18:49.169 --> 18:50.921
+What are you gawping at,
+you blue-eyed cunt?
+
+18:54.133 --> 18:55.801
+That's a longsword you wear?
+
+18:58.345 --> 19:00.013
+Uh, yes, it is mine by right.
+
+19:00.556 --> 19:02.057
+That's an odd thing to say.
+
+19:05.185 --> 19:07.145
+I'm Ser Steffon Fossoway.
+
+19:07.146 --> 19:08.313
+Come try me.
+
+19:09.398 --> 19:11.941
+As you see, me cousin here
+is not ripe yet.
+
+19:11.942 --> 19:13.734
+Do it, ser.
+
+19:13.735 --> 19:16.571
+I may not be ripe,
+but my cousin's
+rotten to the core.
+
+19:16.572 --> 19:18.323
+- Knock the seeds out of him.
+- Quiet!
+
+19:21.285 --> 19:24.453
+I-- I thank you,
+but I have matters to attend.
+
+19:24.454 --> 19:26.914
+What, matters of the hedge,
+I have no doubt.
+
+19:26.915 --> 19:29.333
+[laughing]
+
+19:29.334 --> 19:31.335
+Fucking size of ya.
+
+19:31.336 --> 19:33.254
+Stupid bastard.
+
+19:33.255 --> 19:34.506
+Ser Grance!
+
+19:40.470 --> 19:42.930
+Perhaps we should seek
+quieter accommodations.
+
+19:42.931 --> 19:44.933
+[horse grunting]
+
+19:46.310 --> 19:49.313
+[♪ joyful whistling music
+playing]
+
+19:52.774 --> 19:54.234
+[insect buzzing]
+
+20:05.495 --> 20:07.497
+[insects continue buzzing]
+
+20:09.291 --> 20:12.294
+♪
+
+20:26.934 --> 20:28.936
+[horses nickering]
+
+20:31.813 --> 20:34.565
+[sniffing]
+Oh. Fuck.
+
+20:34.566 --> 20:36.193
+[grunting]
+
+20:38.111 --> 20:39.446
+[sniffing]
+
+20:49.081 --> 20:50.665
+[people chattering]
+
+20:50.666 --> 20:52.000
+He's napping still.
+
+20:53.043 --> 20:54.543
+- Still?
+- Mm.
+
+20:54.544 --> 20:56.880
+On account of his gouty toes.
+
+20:58.507 --> 21:02.343
+One of life's absurd
+little miseries, to be sure.
+
+21:02.344 --> 21:04.095
+[Dunk sighs]
+
+21:04.096 --> 21:06.931
+Makes for restless nights.
+The poor dear.
+
+21:06.932 --> 21:08.766
+Right, absolutely.
+It's just... [sighs]
+
+21:08.767 --> 21:10.893
+Well, it is of some urgency
+that I speak with him,
+
+21:10.894 --> 21:13.814
+so I may enter
+the lists on the morrow.
+
+21:15.023 --> 21:18.067
+- What's this?
+- It means the joust.
+
+21:18.068 --> 21:19.694
+Awful dangerous, that.
+
+21:19.695 --> 21:22.029
+- Yes, well, um...
+- [water pouring]
+
+21:22.030 --> 21:24.700
+I'm not troubled
+with a wealth of options,
+am I?
+
+21:25.826 --> 21:27.410
+And if I mean
+to take service in a castle--
+
+21:27.411 --> 21:30.371
+It must put its body at hazard
+for the pleasure of strangers.
+
+21:30.372 --> 21:31.622
+Ain't that our job?
+
+21:31.623 --> 21:33.874
+- [gasps]
+- Ah! Shut up!
+
+21:33.875 --> 21:35.877
+- You're meant to be dead.
+- [sighs]
+
+21:36.837 --> 21:39.547
+Find a safer trade, lad.
+You'll be happier for it.
+
+21:39.548 --> 21:41.925
+One whore to another.
+
+21:42.884 --> 21:44.720
+[both laughing]
+
+21:46.513 --> 21:47.889
+Must you mock me?
+
+21:48.849 --> 21:50.392
+I was only asking
+for a bit of help.
+
+21:51.476 --> 21:53.562
+I'll try Ser Manfred
+back in the morning.
+
+21:55.439 --> 21:56.564
+Sorry, lad.
+
+21:56.565 --> 21:57.940
+[Beony] Aye.
+
+21:57.941 --> 21:59.400
+We don't mean
+to mock you.
+
+21:59.401 --> 22:02.570
+- We see plenty of green boys
+every tourney.
+- Mm.
+
+22:02.571 --> 22:05.281
+All with glory in their minds,
+but never in their hands.
+
+22:05.282 --> 22:08.327
+Well, perhaps
+I will be different.
+
+22:10.746 --> 22:13.414
+Be good to your body, knight.
+
+22:13.415 --> 22:14.875
+Last one you're like to have.
+
+22:19.963 --> 22:23.215
+- [♪ lively strings playing]
+- [people chattering]
+
+22:23.216 --> 22:25.760
+[performer]
+<i>Our brave hero forges on,</i>
+
+22:25.761 --> 22:28.804
+<i>leaving all he knows behind.</i>
+
+22:28.805 --> 22:33.267
+<i>A father and a friend,
+may seem the world unkind.</i>
+
+22:33.268 --> 22:34.643
+[distant cheering
+and applause]
+
+22:34.644 --> 22:37.104
+<i>Fate has set his lonely path</i>
+
+22:37.105 --> 22:38.774
+<i>through corridors of chance.</i>
+
+22:39.691 --> 22:44.528
+A boy from nothing risks it all,
+ignoring looks askance.
+
+22:44.529 --> 22:47.198
+- Perhaps he's only stupid...
+- [actor whooshing]
+
+22:47.199 --> 22:49.367
+...holding fast
+his mirror shield.
+
+22:49.368 --> 22:55.289
+Great honor his ambition,
+must keep a truth concealed.
+
+22:55.290 --> 22:57.666
+For if his humble shape
+is bared,
+
+22:57.667 --> 22:59.878
+a foul and fiery demise.
+
+23:00.379 --> 23:02.129
+Should the dragon discover
+
+23:02.130 --> 23:04.965
+none but a man
+in great disguise.
+
+23:04.966 --> 23:07.885
+[dragon screeching]
+
+23:07.886 --> 23:09.512
+[audience gasping]
+
+23:09.513 --> 23:11.556
+[cheering and applause]
+
+23:16.978 --> 23:18.980
+[cheering and applause continue]
+
+23:31.493 --> 23:33.495
+[people chattering]
+
+23:36.915 --> 23:39.542
+- [fire whooshing]
+- [people cheering]
+
+23:39.543 --> 23:41.586
+Halfman! Halfman!
+
+23:43.463 --> 23:45.256
+Do I look like
+a half man to you?
+
+23:45.257 --> 23:48.050
+Aye.
+Half man, half giant.
+
+23:48.051 --> 23:49.593
+Look, I'm sorry.
+
+23:49.594 --> 23:51.720
+I should not have urged you
+to try my cousin.
+
+23:51.721 --> 23:55.057
+He'd have broken your hand
+or a knee, if he could.
+
+23:55.058 --> 23:57.017
+He likes to batter men
+in the yard,
+
+23:57.018 --> 23:59.062
+you know, in case
+he meets them in the lists.
+
+24:00.981 --> 24:02.440
+He did not break you.
+
+24:02.441 --> 24:04.067
+[scoffs]
+I'm his blood.
+
+24:04.901 --> 24:07.027
+Though he is the senior branch
+of the apple tree,
+
+24:07.028 --> 24:08.738
+which he never ceases
+to remind me.
+
+24:10.490 --> 24:12.867
+Will you and your cousin
+ride in the tourney?
+
+24:12.868 --> 24:14.952
+He will.
+I would that I could,
+
+24:14.953 --> 24:17.080
+but I'm only a squire.
+
+24:21.126 --> 24:22.752
+Fight well for a squire.
+
+24:24.212 --> 24:26.046
+You have the look
+of a challenger.
+
+24:26.047 --> 24:27.883
+Whose shield
+do you mean to strike?
+
+24:30.719 --> 24:32.553
+Makes no difference.
+
+24:32.554 --> 24:34.306
+[laughing] That's what
+you're supposed to say.
+
+24:39.186 --> 24:41.312
+Though it makes
+all the difference
+in the world.
+
+24:41.313 --> 24:42.522
+[chuckles]
+
+24:44.483 --> 24:45.484
+You hungry?
+
+24:46.860 --> 24:47.986
+Always.
+
+24:49.029 --> 24:52.032
+[♪ mysterious, percussive
+music playing]
+
+24:55.577 --> 24:57.579
+[people chattering]
+
+24:59.289 --> 25:01.749
+[knights shouting indistinctly]
+
+25:01.750 --> 25:04.794
+[music and chatter continue]
+
+25:08.840 --> 25:11.259
+[knight laughing]
+
+25:12.093 --> 25:15.013
+Lyonel Baratheon.
+The Laughing Storm,
+they call him.
+
+25:16.932 --> 25:18.432
+I thought he'd be bigger.
+
+25:18.433 --> 25:20.727
+[Lyonel Baratheon]
+Four thousand years ago...
+
+25:21.978 --> 25:24.146
+- Four thousand years...
+- Where are you going?
+
+25:24.147 --> 25:27.483
+...ago-- cunts.
+I can't hear myself.
+
+25:27.484 --> 25:32.530
+I've had a profound thought,
+if anyone would care to listen.
+
+25:32.531 --> 25:33.949
+- [room quiets]
+- [table banging]
+
+25:36.284 --> 25:38.661
+Four thousand years ago,
+
+25:38.662 --> 25:41.664
+our ancestors
+gathered in that...
+
+25:41.665 --> 25:44.375
+[clearing throat]
+...big field outside
+
+25:44.376 --> 25:46.627
+to blood each other with sticks
+
+25:46.628 --> 25:48.879
+and have a little bit
+of gay fun.
+
+25:48.880 --> 25:52.508
+And they say it was
+this country's first-ever joust.
+
+25:52.509 --> 25:54.094
+Well, I say...
+
+26:00.475 --> 26:01.976
+Uh, the fuck
+was I gonna say?
+
+26:01.977 --> 26:03.937
+[muttering]
+"First-ever joust..."
+
+26:05.564 --> 26:06.565
+Ah.
+
+26:09.651 --> 26:12.821
+Men could not have devised
+such a joy.
+
+26:15.865 --> 26:16.991
+So, who was it?
+
+26:16.992 --> 26:19.077
+[sipping loudly]
+
+26:20.620 --> 26:21.663
+[Lyonel] Huh?
+
+26:22.706 --> 26:23.748
+Who was it?
+
+26:25.667 --> 26:27.835
+[person coughing]
+
+26:27.836 --> 26:29.044
+Mm.
+
+26:29.045 --> 26:31.089
+[laughing]
+
+26:32.924 --> 26:34.842
+[sighs]
+Fuck it.
+
+26:34.843 --> 26:36.385
+A hundred gold
+to the man, beast,
+
+26:36.386 --> 26:38.012
+or god who sticks me best.
+
+26:38.013 --> 26:39.430
+- [all cheering]
+- [mugs pounding]
+
+26:39.431 --> 26:43.017
+Now, eat your birds
+so we can dance!
+
+26:43.018 --> 26:46.021
+- [drums beating]
+- [guests chattering]
+
+26:51.151 --> 26:54.154
+- [♪ string music playing]
+- [guests shouting, cheering]
+
+26:58.992 --> 27:01.535
+[music and shouting continue]
+
+27:01.536 --> 27:03.580
+[clapping in rhythm]
+
+27:23.308 --> 27:25.018
+[mouthing silently]
+
+27:30.857 --> 27:32.859
+[music and clapping continue]
+
+27:42.243 --> 27:43.495
+[Lyonel sighs]
+
+27:44.746 --> 27:47.957
+You ever been punched
+in the face before?
+
+27:50.168 --> 27:51.919
+I beg-- I beg your pardon,
+Ser Lyonel?
+
+27:51.920 --> 27:54.963
+Big men get punched
+more than little men.
+
+27:54.964 --> 27:56.216
+Did you know that?
+
+27:57.676 --> 27:59.969
+No, but-- but I believe it.
+
+28:02.681 --> 28:05.849
+That why you slouch?
+So you don't get punched?
+
+28:05.850 --> 28:08.268
+I-- I don't slouch.
+
+28:08.269 --> 28:10.312
+Oh, you've been
+cowering all evening
+
+28:10.313 --> 28:12.856
+like a maiden
+on her wedding night.
+
+28:12.857 --> 28:14.775
+[chuckles]
+
+28:14.776 --> 28:18.153
+I-- I meant
+no disrespect, ser, honest.
+
+28:18.154 --> 28:21.783
+Where I grew up, you--
+you learn to go unnoticed,
+is all.
+
+28:22.659 --> 28:24.452
+The seven above
+gave you tallness.
+
+28:25.453 --> 28:26.705
+So, be tall.
+
+28:28.123 --> 28:30.875
+Or I will name you a heretic
+and burn you.
+
+28:31.960 --> 28:35.796
+Drown you.
+Drop you off a tall pl--
+
+28:35.797 --> 28:37.715
+I don't know.
+W-What do they do to heretics?
+
+28:37.716 --> 28:40.300
+Burn them, my lord.
+
+28:40.301 --> 28:42.010
+- Fine.
+- [blade clatters]
+
+28:42.011 --> 28:43.596
+What have you brought me?
+
+28:45.682 --> 28:46.683
+Um...
+
+28:48.977 --> 28:52.146
+Uh, ser, I... [clearing throat]
+beggin' your pardons.
+
+28:52.147 --> 28:53.732
+I-- I didn't realize.
+
+28:54.941 --> 28:56.985
+You wish to curry
+my favor some.
+
+28:58.445 --> 29:00.071
+Yet you come
+with an empty hand.
+
+29:04.659 --> 29:06.076
+Lord Cafferen,
+
+29:06.077 --> 29:07.995
+the smug cunt in red...
+
+29:07.996 --> 29:09.413
+[cheering, laughter]
+
+29:09.414 --> 29:11.582
+...he is scarce
+to pay his rents.
+
+29:11.583 --> 29:13.667
+His people starve each winter,
+
+29:13.668 --> 29:16.087
+yet even he shinied up this...
+
+29:17.505 --> 29:19.381
+bauble from
+his family's cellars,
+
+29:19.382 --> 29:22.384
+for he understands
+that all men, in their way,
+
+29:22.385 --> 29:25.930
+wish only for your help,
+or your head.
+
+29:28.892 --> 29:30.518
+You've come for my head, then.
+
+29:32.103 --> 29:33.687
+W-What?
+
+29:33.688 --> 29:36.106
+No! No.
+
+29:36.107 --> 29:40.403
+Then, why the fuck
+are you in my tent?
+
+29:45.158 --> 29:46.659
+S-Supper.
+
+29:53.541 --> 29:55.209
+[Lyonel laughing]
+
+29:55.210 --> 29:57.212
+[laughter]
+
+29:59.255 --> 30:00.673
+[chuckles] Alright.
+
+30:02.884 --> 30:04.551
+Actually makes sense.
+
+30:04.552 --> 30:06.930
+- Supper.
+- What is your name, man?
+
+30:08.765 --> 30:10.057
+Dunk-- Ser Dunk.
+
+30:10.058 --> 30:11.518
+That's ridiculous.
+
+30:14.813 --> 30:16.605
+[Lyonel clearing throat]
+
+30:16.606 --> 30:17.981
+Do you like dancing?
+
+30:17.982 --> 30:19.984
+- [guests stomping rhythmically]
+- Doesn't everyone?
+
+30:21.402 --> 30:24.404
+- [♪ upbeat music playing]
+- [chanting]
+Hey! Hey! Hey! Hey!
+
+30:24.405 --> 30:26.449
+[chanting and music continue]
+
+30:35.500 --> 30:37.502
+[exclaiming]
+
+30:45.343 --> 30:46.553
+- [stomping]
+- [Dunk grunting]
+
+31:04.821 --> 31:06.823
+- [shouting]
+- [guests cheering]
+
+31:13.413 --> 31:16.206
+- [♪ music continues playing]
+- [laughing]
+
+31:16.207 --> 31:18.251
+[Lyonel cheering
+and exclaiming]
+
+31:44.319 --> 31:45.861
+[music ends abruptly]
+
+31:45.862 --> 31:49.407
+The swells heaved.
+You could lick
+salt from the air.
+
+31:51.117 --> 31:54.287
+But I'd come to find
+what men do
+when they die at sea.
+
+31:56.039 --> 31:59.042
+So, drove I on
+into the storm.
+
+32:00.043 --> 32:02.045
+[laughing]
+
+32:03.713 --> 32:06.466
+- Weren't you afraid?
+- Ahh.
+
+32:09.928 --> 32:11.971
+Within every man,
+there are many men.
+
+32:13.765 --> 32:15.223
+Mm.
+
+32:15.224 --> 32:19.019
+But that I had to do,
+Stormlanders had always done.
+
+32:19.020 --> 32:22.065
+And if they had done it,
+I could do it, too.
+
+32:23.274 --> 32:24.275
+Hm.
+
+32:25.193 --> 32:27.028
+You know, it's best
+not to agonize.
+
+32:30.406 --> 32:33.409
+Yeah, I-- I agonize a lot.
+
+32:34.410 --> 32:35.744
+[Lyonel] Mm.
+
+32:35.745 --> 32:38.872
+Sometimes, I-- I think
+I agonize too much,
+
+32:38.873 --> 32:41.334
+and I just end up
+agonizing over that.
+[chuckles]
+
+32:42.377 --> 32:43.752
+Mm.
+
+32:43.753 --> 32:46.922
+And I'm quick and strong, sure.
+
+32:46.923 --> 32:49.091
+- Sure.
+- But so are you.
+
+32:49.092 --> 32:50.634
+Sure.
+
+32:50.635 --> 32:53.136
+Plus, you've trained
+sword and lance
+
+32:53.137 --> 32:55.555
+with the finest
+masters-at-arms in the realm.
+
+32:55.556 --> 32:56.683
+I mean...
+
+32:57.725 --> 33:00.645
+what chance do I have?
+Truly?
+
+33:01.813 --> 33:04.357
+Oh, you have no chance.
+[chuckles]
+
+33:06.067 --> 33:07.235
+[Dunk sighs]
+
+33:09.862 --> 33:14.158
+But it's a great honor to test
+oneself against a worthy foe.
+
+33:16.452 --> 33:19.329
+- No disrespect, ser.
+- Mm.
+
+33:19.330 --> 33:20.914
+That's easy for you to say.
+
+33:20.915 --> 33:24.418
+You have a name,
+an inheritance.
+
+33:24.419 --> 33:28.255
+One loss, and I won't be able
+to ransom back my own horse.
+
+33:28.256 --> 33:30.507
+[laughing]
+
+33:30.508 --> 33:32.134
+[chuckles softly]
+
+33:32.135 --> 33:34.178
+[both laughing]
+
+33:35.263 --> 33:37.515
+A knight without a horse
+is no knight at all.
+
+33:38.391 --> 33:40.393
+- Aye.
+- Mm.
+
+33:41.644 --> 33:43.937
+- [mug scraping]
+- [Lyonel sipping loudly]
+
+33:43.938 --> 33:45.189
+So, what should I do?
+
+33:49.694 --> 33:51.112
+I don't know.
+
+33:53.990 --> 33:55.700
+I'm really quite drunk.
+
+34:00.204 --> 34:02.206
+[stomping, grunting]
+
+34:04.125 --> 34:05.126
+Okay.
+
+34:06.210 --> 34:07.211
+Thanks.
+
+34:07.962 --> 34:08.963
+[sighs]
+
+34:09.714 --> 34:11.799
+[hiccuping]
+Sorry.
+
+34:12.800 --> 34:13.968
+[Dunk sniffing]
+
+34:15.928 --> 34:17.096
+[sighs]
+
+34:18.723 --> 34:21.141
+[guests chattering,
+laughing]
+
+34:21.142 --> 34:22.392
+[Dunk coughs]
+
+34:22.393 --> 34:24.186
+[couple laughing]
+
+34:24.187 --> 34:26.481
+[Manfred Dondarrion chuckling]
+
+34:27.732 --> 34:29.609
+[companions giggling]
+
+34:30.610 --> 34:32.612
+[all giggling]
+
+34:34.030 --> 34:35.615
+Ser Arlan of Pennytree.
+
+34:36.741 --> 34:38.742
+He-- he served your Lord Father
+
+34:38.743 --> 34:40.828
+to hunt the Vulture King
+in the Red Mountains.
+
+34:41.621 --> 34:42.829
+I-- I was only a boy, but--
+
+34:42.830 --> 34:44.332
+I thought you said
+you were a Dornishman.
+
+34:45.416 --> 34:47.709
+No, he said he's hung
+like a Dornishman.
+
+34:47.710 --> 34:50.421
+No, I said
+I've hung Dornishmen.
+
+34:52.924 --> 34:54.716
+Perhaps we would speak
+on the morn.
+
+34:54.717 --> 34:56.510
+I know your
+penny knight not.
+
+34:56.511 --> 34:59.012
+Nor you, brother.
+Be gone.
+
+34:59.013 --> 35:00.348
+[chuckles]
+
+35:03.142 --> 35:06.228
+But Ser Arlan took a wound
+in your father's service.
+
+35:06.229 --> 35:07.687
+How could you have
+forgotten him?
+
+35:07.688 --> 35:09.022
+- [soldiers shouting]
+- [swords clanging]
+
+35:09.023 --> 35:10.565
+- [flesh squelching]
+- [screaming]
+
+35:10.566 --> 35:13.860
+My lord father
+took 800 swords
+into those mountains.
+
+35:13.861 --> 35:17.198
+We've forgotten men
+who reaped much more
+than a wound.
+
+35:17.949 --> 35:20.867
+Please, ser, I-- I will not
+be allowed to challenge
+
+35:20.868 --> 35:23.371
+unless a knight
+or a lord will vouch for me.
+
+35:23.788 --> 35:24.622
+And what is that to me?
+
+35:26.499 --> 35:28.501
+[chuckling]
+
+35:36.342 --> 35:39.720
+- [insects chirring]
+- [cheering in distance]
+
+35:51.023 --> 35:52.150
+You!
+
+35:53.651 --> 35:54.652
+What...
+
+35:55.987 --> 35:58.280
+- [horse nickering]
+- What are you doing?
+
+35:58.281 --> 36:01.158
+Cooking a fish.
+Do you want some?
+
+36:01.159 --> 36:04.494
+No. I mean,
+how did you get here?
+
+36:04.495 --> 36:05.954
+Did you steal a horse?
+
+36:05.955 --> 36:07.789
+I rode in the back
+of a lamb cart.
+
+36:07.790 --> 36:10.084
+[scoffs]
+Lamb cart.
+
+36:11.711 --> 36:14.171
+- Well, you best
+find another one.
+- You can't make me go.
+
+36:14.172 --> 36:16.089
+I'd had enough of that inn.
+
+36:16.090 --> 36:19.509
+Now, listen,
+I'll have no more
+insolence from you, boy.
+
+36:19.510 --> 36:22.262
+I should throw you
+over my horse
+and take you home.
+
+36:22.263 --> 36:24.764
+You'd need to ride
+all the way
+to King's Landing.
+
+36:24.765 --> 36:27.268
+- You'd miss the tourney.
+- King's Landing?
+
+36:28.269 --> 36:30.188
+- You're from Flea Bottom?
+- No.
+
+36:31.939 --> 36:32.940
+Aye.
+
+36:40.615 --> 36:42.115
+What are those doing there?
+
+36:42.116 --> 36:44.284
+I washed them.
+I made the fire,
+
+36:44.285 --> 36:46.620
+caught the fish,
+and groomed the horses.
+
+36:46.621 --> 36:48.496
+I would have raised
+your pavilion,
+
+36:48.497 --> 36:49.832
+but I couldn't find one.
+
+36:51.042 --> 36:53.376
+- There's my pavilion.
+- That's a tree.
+
+36:53.377 --> 36:56.005
+Yes, and it's all the pavilion
+a true knight needs.
+
+36:57.006 --> 36:59.884
+I'd sooner sleep under the stars
+than in some smoky tent.
+
+37:01.552 --> 37:03.470
+What if it rains?
+
+37:03.471 --> 37:05.305
+The tree will shelter me.
+
+37:05.306 --> 37:07.558
+- Trees leak.
+- [scoffs]
+
+37:09.018 --> 37:10.644
+So they do.
+
+37:10.645 --> 37:11.938
+What's your name?
+
+37:13.105 --> 37:15.565
+- Dunk.
+- Ser Dunk.
+
+37:15.566 --> 37:18.945
+That's no name for a knight.
+Is it short for Duncan?
+
+37:19.779 --> 37:21.988
+Yeah.
+[clearing throat] Yes.
+
+37:21.989 --> 37:23.699
+Uh, Ser Duncan of...
+
+37:28.287 --> 37:31.165
+[inhales sharply]
+Ser Duncan the Tall.
+
+37:32.124 --> 37:33.750
+Never heard of him.
+
+37:33.751 --> 37:35.710
+Do you know every knight
+in the Seven Kingdoms, then?
+
+37:35.711 --> 37:37.170
+The good ones.
+
+37:37.171 --> 37:38.464
+[scoffs]
+
+37:40.007 --> 37:42.425
+- You got a name, thief?
+- Egg.
+
+37:42.426 --> 37:43.469
+Egg.
+
+37:45.179 --> 37:49.015
+Well, Egg, by rights,
+I should beat you bloody,
+
+37:49.016 --> 37:50.309
+send you on your way.
+
+37:52.103 --> 37:53.937
+But you look as though
+you don't eat much.
+
+37:53.938 --> 37:55.230
+[sighs]
+
+37:55.231 --> 37:57.400
+And if you'll swear
+to do as you're told...
+
+37:59.652 --> 38:01.153
+I'll let you serve me
+for the tourney.
+
+38:04.031 --> 38:05.157
+After that, well...
+
+38:07.660 --> 38:08.744
+we'll see.
+
+38:11.622 --> 38:15.293
+I don't have much,
+but if you prove
+worth your keep...
+
+38:16.919 --> 38:19.255
+you'll have clothes on your back
+and food in your belly.
+
+38:20.464 --> 38:22.882
+The clothes
+might be rough-spun
+and the food,
+
+38:22.883 --> 38:24.926
+salt beef and salt fish,
+
+38:24.927 --> 38:26.220
+but you won't go hungry.
+
+38:28.139 --> 38:29.765
+I promise not to beat you.
+
+38:31.058 --> 38:32.685
+Except when you deserve it.
+
+38:33.644 --> 38:34.687
+Yes, my lord.
+
+38:36.355 --> 38:37.356
+"Ser."
+
+38:39.233 --> 38:40.651
+I'm only a hedge knight.
+
+38:46.324 --> 38:48.326
+- [fire crackling]
+- [insects chirring]
+
+38:50.911 --> 38:52.204
+[Egg sighs]
+
+38:53.414 --> 38:55.916
+A falling star brings luck
+to those who see it.
+
+38:58.336 --> 39:00.253
+Go to sleep, boy.
+
+39:00.254 --> 39:03.423
+All the other knights
+are in their pavilions by now,
+
+39:03.424 --> 39:05.885
+staring up at silk
+instead of sky.
+
+39:08.054 --> 39:09.680
+Do you want a clout
+in the ear?
+
+39:20.733 --> 39:22.818
+S-So, the luck is ours alone?
+
+39:29.575 --> 39:32.578
+[♪ gentle music playing]
+
+39:49.345 --> 39:52.348
+♪

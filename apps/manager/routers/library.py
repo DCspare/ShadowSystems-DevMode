@@ -3,14 +3,16 @@ import os
 import sys
 import base64
 import logging
+import subprocess 
 sys.path.append("/app")
 from fastapi import Depends
 from pyrogram.file_id import FileId # Used to decode the string identity
 from shared.schemas import SignRequest
+from shared.settings import settings
 from shared.database import db_service
 from core.utils import generate_short_id
 from core.security import sign_stream_link 
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from services.bot_manager import bot_manager
 from services.metadata import metadata_service
 from fastapi import APIRouter, HTTPException , Request
@@ -208,6 +210,42 @@ async def update_metadata(tmdb_id: int, payload: dict):
     
     return {"status": "updated", "modifications": res.modified_count}
 
+@router.delete("/remove_file/{tmdb_id}")
+async def remove_specific_file(tmdb_id: int, file_id: str, season: int = 0):
+    """
+    Precision Strike: Removes a SINGLE file link without deleting the movie meta.
+    - If season=0 (default): Targets 'files' array (Movies).
+    - If season=N (series): Targets 'seasons.N' array.
+    """
+    try:
+        # Case A: Movie (files array uses 'telegram_id' key)
+        if season == 0:
+            query_update = {
+                "$pull": { "files": { "telegram_id": file_id } } 
+            }
+        # Case B: Series (seasons.X list uses 'file_id' key in schema)
+        else:
+            # Dynamically target the specific season key (e.g., "seasons.1")
+            target_key = f"seasons.{season}"
+            query_update = {
+                "$pull": { target_key: { "file_id": file_id } }
+            }
+
+        result = await db_service.db.library.update_one(
+            {"tmdb_id": tmdb_id},
+            query_update
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="File ID not found or content does not exist")
+
+        logger.info(f"✂️ Granular Delete: Removed {file_id} from TMDB:{tmdb_id} (S{season})")
+        return {"status": "removed", "tmdb_id": tmdb_id, "removed_file": file_id}
+
+    except Exception as e:
+        logger.error(f"Delete Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
 @router.post("/attach_file/{tmdb_id}")
 async def attach_media_manually(tmdb_id: int, file_path: str):
     """
@@ -219,3 +257,70 @@ async def attach_media_manually(tmdb_id: int, file_path: str):
     payload = f"{tmdb_id}|{file_path}"
     await db_service.redis.lpush("queue:leech", payload)
     return {"status": "task_queued", "tmdb_id": tmdb_id, "file": file_path}
+
+# --- On-The-Fly Subtitle Extractor ---
+@router.get("/subtitle/{file_id}/{index}.vtt")
+async def get_subtitle(file_id: str, index: int):
+    """
+    On-the-fly Subtitle Extractor.
+    Extracts track {index} from the Telegram stream and converts to VTT.
+    """
+    # 1. Lookup Location Metadata (Same logic as Nginx resolver)
+    db_item = await db_service.db.library.find_one(
+        {"files.telegram_id": file_id}, {"files.$": 1}
+    )
+    if not db_item:
+        raise HTTPException(status_code=404, detail="File not found in DB")
+
+    file_rec = db_item["files"][0]
+    msg_id = file_rec.get("location_id")
+    chat_id = settings.TG_LOG_CHANNEL_ID # From shared settings
+
+    # 2. Build the Internal Stream URL (Pointing to our Go Engine)
+    # We use the internal docker name 'gateway' or 'stream-engine'
+    # We bypass Secure Link check here because it's an internal server-to-server call
+    source_url = f"http://stream-engine:8000/stream/{file_id}"
+
+    # 3. FFmpeg Command with injected Header
+    # We use '-headers' to pass the X-Location info to Go via FFmpeg's HTTP client
+    # -i: source | -map 0:s:{index}: extract specific sub | -f webvtt: output format | -: pipe to stdout
+    headers = f"X-Location-Msg-ID: {msg_id}\r\nX-Location-Chat-ID: {chat_id}\r\n"
+
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", 
+        "error",
+        "-headers", headers, 
+        "-analyzeduration", "10000000", 
+        "-probesize", "10000000",
+        "-i", source_url,
+        "-map", f"0:{index}", 
+        "-f", "webvtt", "-"
+    ]
+
+    try:
+        # We use a context manager to ensure the process is killed if the request is closed
+        process = subprocess.Popen(
+            cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            bufsize=10**6 # 1MB Buffer
+        )
+        
+        # We stream the response directly to the browser
+        def generate():
+            try:
+                # Stream the output
+                for line in iter(process.stdout.readline, b""):
+                    yield line
+            finally:
+                # Cleanup
+                process.stdout.close()
+                process.stderr.close()
+                process.terminate()
+
+        return StreamingResponse(generate(), 
+        media_type="text/vtt")
+
+    except Exception as e:
+        logger.error(f"💥 Subtitle Engine Crashed: {e}")
+        raise HTTPException(status_code=500, detail="Could not extract subtitle")

@@ -33,6 +33,8 @@ SHADOW-SYSTEMS (Root)
 │       │   └── cmd_leech.py
 │       ├── routers/
 │       │   └── library.py
+│       │   └── auth.py          # /guest and JWT Tokens Authentication & Authorization
+│       │   └── admin.py         # /users /stats Admin Panel Routes (Dashboard) & API Management Logic 
 │       ├── services/
 │       │   ├── __init__.py
 │       │   ├── bot_manager.py
@@ -79,6 +81,7 @@ SHADOW-SYSTEMS (Root)
 ├── docker-compose.dev.yml        # "Potato Mode" Development Orchestrator
 ├── gen_session.py
 ├── README.md
+├── sub.txt                       # Example on-the-fly subtitle extraction output file 
 └── Survivors-Logs.md
 ```
 
@@ -171,6 +174,12 @@ SHADOW-SYSTEMS (Root)
 - [x] **Smart Series Mapping:** Logic to detect `SxxExx` via filename or Manual Hints (`/leech ... "Title S01E01"`). Implemented `PTN` logic with a Fallback RegEx to detect `SxxExx` patterns. Episodes now automatically sort into nested MongoDB Season buckets (`seasons.1`, `seasons.2`).
 - [x] **Atomic Transactions:** Renamed `leech.py` to `flow_ingest.py` for semantic clarity. Secured the Leech pipeline with "Cleanup-Finally" blocks and strict Database Upsert paths (Skeleton Creation vs Enrichment Update) to prevent data corruption.
 
+### 💎 Achievements (v0.6.0-epsilon) - Identity & Orchestration
+- [x] **Stateful Auth Engine:** Implemented JWT-based Guest Identity system with `HttpOnly` cookie security.
+- [x] **Granular Data Control:** Added atomic MongoDB `$pull` logic to delete specific files/episodes without nuking the entire title entity.
+- [x] **On-the-Fly Subtitle Bridge:** Built a high-performance FFmpeg pipe that extracts "Soft Subtitles" from MKV streams and serves them as `.vtt` to web browsers via an internal header-authenticated Go bridge.
+- [x] **Task-UUID Queue Logic:** Upgraded the Redis pipeline to support unique Task IDs, allowing live status tracking and remote "Kill Signals" for specific downloads.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -207,9 +216,19 @@ docker compose -f docker-compose.dev.yml down
 
 ## 🛠 The Hurdle Log: Challenges & Resolutions
 *The **"Shadow Survivor's Log"**. It documents every technical roadblock we encountered during Phase 1 & 2 in the Google Project IDX environment and the exact "Shadow Protocol" fixes we applied.*
-[Survivors-Log.md](Survivors-Log.md)
+#### 🧱 Hurdle #40: The Internal Header Bridge
+- **The Error:** `HTTP 400 Bad Request` or `500 Internal Error` when calling subtitles.
+- **Description:** The Manager API (Python) tried to call the Go Stream Engine directly. However, the Go Engine requires `X-Location-Msg-ID` headers to find the Telegram file. Since the browser doesn't send these, the request failed.
+- **The Fix:** Implemented a "Smart Resolver" in `library.py`. The Manager now fetches the location data from MongoDB first, then injects those headers into the `subprocess.Popen` FFmpeg command via the `-headers` flag.
+
+#### 🧱 Hurdle #41: FastAPI Type-Strictness (Parsing Fail)
+- **The Error:** `HTTP 422 Unprocessable Entity`.
+- **Description:** A request to `/subtitle/{file_id}/index3.vtt` failed because the route expected an `int` for the index. The string "index3" could not be cast to an integer.
+- **The Fix:** Corrected the frontend/CURL calling pattern to pass only the integer (e.g., `/subtitle/{file_id}/3.vtt`). Strictly enforced integer type-hinting in FastAPI to prevent command injection.
+
+for all Hurdles check: [Survivors Log](Survivors-Log.md)
 
 ---------
 
-*Last Updated: 2026-01-18*
-*Time: 05:32pm*
+*Last Updated: 2026-02-01*
+*Time: 12:09pm*

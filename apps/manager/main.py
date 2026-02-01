@@ -1,7 +1,7 @@
 # apps/manager/main.py 
 import sys
 import logging
-from routers import library
+from routers import library, auth, admin
 sys.path.append("/app/shared") # Docker fix for imports 
 from fastapi import FastAPI, Request 
 from shared.settings import settings
@@ -83,6 +83,8 @@ app.add_middleware(
 
 # --- ROUTES ---
 app.include_router(library.router)  
+app.include_router(auth.router)
+app.include_router(admin.router)
 
 # --- LIFECYCLE EVENTS ---
 @app.on_event("startup")
