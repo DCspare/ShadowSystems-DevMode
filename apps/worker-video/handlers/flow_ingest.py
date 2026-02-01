@@ -10,6 +10,7 @@ import asyncio
 sys.path.append("/app/shared")
 from pyrogram import Client, enums
 from shared.settings import settings
+from shared.database import db_service
 from pyrogram.file_id import FileId
 from handlers.processor import processor
 from shared.formatter import formatter 
@@ -18,9 +19,11 @@ from pyrogram.types import InputMediaPhoto, InputMediaVideo
 logger = logging.getLogger("Leecher")
 
 class MediaLeecher:
-    def __init__(self, client, db):
+    def __init__(self, client, db, redis=None):
         self.client = client
         self.db = db
+        # Use passed redis, fallback to shared service singleton
+        self.redis = redis or db_service.redis
 
         # ✨ CLEAN CONFIG USAGE
         self.gen_samples = settings.GENERATE_SAMPLES
@@ -202,16 +205,41 @@ class MediaLeecher:
         if total > 0:
             pct = int(current * 100 / total)
             # Safe checking for _last_log attribute
-            if pct % 20 == 0 and pct != getattr(self, '_last_log', -1):
+            if pct % 10 == 0 and pct != getattr(self, '_last_log', -1):
                 logger.info(f"📤 Upload: {pct}%")
                 self._last_log = pct
 
-    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto"):
+                # --- UPDATE REDIS PROGRESS ---
+                if hasattr(self, 'current_task_id') and self.current_task_id:
+                    status_key = f"task_status:{self.current_task_id}"
+                    # Check if redis exists before calling
+                    if self.redis:
+                        await self.redis.hset(status_key, "progress", pct)
+                    
+                    # --- MID-UPLOAD KILL SWITCH ---
+                    kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
+                    if kill_check:
+                        logger.warning(f"🛑 Kill signal received during upload for {self.current_task_id}!")
+                        raise Exception("ABORTED_BY_SIGNAL")
+
+    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None):
         # SAFETY INIT: Variables must exist before TRY block
+        self.current_task_id = task_id
         current_file_path = file_path
         cleanup_targets = [file_path]
         
         try:
+            # 1. Kill Switch Check (Before Starting)
+            if task_id and self.redis:
+            # Check if user cancelled while we were downloading
+                is_killed = await self.redis.get(f"kill_signal:{task_id}")
+                if is_killed:
+                    logger.info(f"🛑 Kill signal detected for {task_id}. Aborting.")
+                    raise Exception("TASK_CANCELLED_BY_USER")
+            
+            # Update status to 'uploading'
+            await self.redis.hset(f"task_status:{task_id}", "status", "uploading")
+
             file_name = os.path.basename(current_file_path)
 
             # 1. Fetch DB Meta (For the beautiful caption with Smart Fallback)
@@ -264,25 +292,53 @@ class MediaLeecher:
                      }
 
             # --- BRANDED RENAMING LOGIC ---
-            ext = os.path.splitext(file_name)[1]
             # Construct: Title.S01E01.720p.[ShadowSystem].mp4
-            # We sanitize spaces to dots for clean file names
-            safe_title = ptn.get('title', 'Video').replace(' ', '.')
+            ext = os.path.splitext(file_name)[1]
+
+            # 1. Determine the best Title
+            # Priority: 1. TMDB Title (Monster) | 2. PTN Guess | 3. Fallback "Video"
+            db_title = db_item.get('title')
+            ptn_title = ptn.get('title')
+            
+            # Logic: If current filename is a "safe/truncated" name, ignore PTN and use DB
+            if "truncated" in file_name.lower() or "direct" in file_name.lower() or not ptn_title:
+                best_title = db_title or "Video"
+            else:
+                best_title = ptn_title
+                
+            # 2. Sanitize for Filesystem (Dots instead of spaces)
+            safe_title = best_title.replace(' ', '.')
+
+            # 3. Quality Tag
             quality_tag = ptn.get('quality', 'HD')
             
+            # 4. Episode String (S01E01)
             s_tag = ""
             if ptn.get('season') and ptn.get('episode'):
                 s_tag = f".S{ptn.get('season'):02d}-E{ptn.get('episode'):02d}"
                 
+            # 5. Construct Final Branded Name
+            # Format: Title.S01E01.720p.[ShadowSystem].mp4
             branded_name = f"{safe_title}{s_tag}.{quality_tag}.{self.branding}{ext}"
+
+            # Remove any double dots that might have occurred
+            branded_name = branded_name.replace("..", ".")
             
-            # Perform Rename
+            # 6. Perform Rename
             new_path = os.path.join(os.path.dirname(file_path), branded_name)
-            os.rename(file_path, new_path)
-            file_path = new_path
-            file_name = branded_name
+            try:
+                os.rename(file_path, new_path)
+
+                # Add the NEW path to cleanup targets so it gets deleted on cancel/finish
+                cleanup_targets.append(new_path)
+
+                file_path = new_path
+                current_file_path = new_path # Update the safety variable
+                file_name = branded_name
             
-            logger.info(f"🏷️ Branded as: {file_name}")
+                logger.info(f"🏷️ Branded via DB/TMDB as: {file_name}")
+            except Exception as e:
+                logger.error(f"Rename failed: {e}. Continuing with original.")
             
             # 3. Prepare Visuals
             clean_caption = formatter.build_caption(
@@ -484,10 +540,51 @@ class MediaLeecher:
                 await self.db.library.insert_one(new_doc)
             
             logger.info(f"✅ Index Complete | Series: {bool(e_num)} (S{s_num}E{e_num})")
+
+            # Final Redis Update
+            if task_id and self.redis:
+                await self.redis.hset(f"task_status:{task_id}", mapping={
+                    "status": "completed",
+                    "progress": 100
+                })
+                await self.redis.expire(f"task_status:{task_id}", 600) # Keep for 10mins
+
             return True
 
         except Exception as e:
-            logger.error(f"Critical Leech Fail: {e}")
+            err_str = str(e)
+
+            # 1. Handle Cancellation specifically
+            if "ABORTED_BY_SIGNAL" in err_str or "TASK_CANCELLED" in err_str:
+                logger.warning(f"🛑 Task {task_id} gracefully stopped via Kill Switch.")
+                if task_id and self.redis:
+                    await self.redis.hset(f"task_status:{task_id}", "status", "cancelled")
+
+                # 📢 NOTIFY USER VIA TELEGRAM
+                try:
+                    await self.client.send_message(
+                        chat_id=self.log_channel,
+                        text=(
+                            f"🛑 **Task Aborted**\n"
+                            f"🆔 ID: `{task_id}`\n"
+                            f"🗑️ Status: Content scrubbed and slot released."
+                        )
+                    )
+                except Exception as notify_err:
+                    logger.error(f"Failed to send cancellation msg: {notify_err}")
+            
+            # 2. Handle Real Errors (Crashes/Network)
+            else:
+                logger.error(f"Critical Leech Fail: {e}")
+                if task_id and self.redis:
+                    await self.redis.hset(f"task_status:{task_id}", "status", f"failed: {error_str[:20]}")
+                
+                # Optional: Notify of failure
+                await self.client.send_message(
+                    chat_id=self.log_channel,
+                    text=f"❌ **Task Failed**\nID: `{task_id}`\nError: `{error_str[:50]}`"
+                )
+                
             return False
         
         finally:

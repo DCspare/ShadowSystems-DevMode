@@ -173,7 +173,7 @@ class VideoWorker:
             logger.warning(f"⚠️ Automatic Handshake failed: {e}")
             logger.warning("👉 ACTION: Send '/health' in the Log Channel/Group to fix cache!")
 
-        self.leecher = MediaLeecher(self.app, self.db)
+        self.leecher = MediaLeecher(self.app, self.db, self.redis)
         logger.info(f"Worker fully operational as @{(await self.app.get_me()).username}")
 
     async def task_watcher(self):
@@ -186,15 +186,26 @@ class VideoWorker:
                     payload = task[1]
                     logger.info(f"Consumed task: {payload}")
                     try:
-                        # 🔁 FLEXIBLE SPLIT (Supports 3 or 4 args)
+                        # NEW FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name
                         parts = payload.split("|")
-                        tmdb_id = parts[0]
-                        raw_url = parts[1]
-                        type_hint = parts[2] if len(parts) > 2 else "auto"
-                        name_hint = parts[3] if len(parts) > 3 else ""
+                        task_id = parts[0]
+                        tmdb_id = parts[1]
+                        raw_url = parts[2]
+                        type_hint = parts[3] if len(parts) > 3 else "auto"
+                        name_hint = parts[4] if len(parts) > 4 else ""
+
+                        # Update Status to 'Downloading'
+                        status_key = f"task_status:{task_id}"
+                        await self.redis.hset(status_key, "status", "downloading")
 
                         # 1. Download
                         target_info = downloader.get_direct_url(raw_url)
+
+                        if not target_info:
+                            logger.error(f"❌ Could not resolve URL: {raw_url}")
+                            await self.redis.hset(status_key, "status", "error: invalid_url")
+                            continue # Skip to next task
+
                         local_path = await downloader.start_download(target_info)
                         
                         if local_path and os.path.exists(local_path):
@@ -215,7 +226,8 @@ class VideoWorker:
                             await self.leecher.upload_and_sync(
                                 local_path, 
                                 int(tmdb_id),
-                                type_hint=type_hint
+                                type_hint=type_hint,
+                                task_id=task_id
                             )
 
                             # 3. Clean
