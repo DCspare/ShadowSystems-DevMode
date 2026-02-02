@@ -28,7 +28,7 @@ SHADOW-SYSTEMS (Root)
 │       │   ├── __init__.py
 │       │   ├── config.py
 │       │   ├── security.py
-│       │   └── utils.py
+│       │   └── utils.md         # Moved to `apps/shared/`
 │       ├── handlers/
 │       │   └── cmd_leech.py
 │       ├── routers/
@@ -49,8 +49,8 @@ SHADOW-SYSTEMS (Root)
 │   │   ├── database.py           # Shared DB Connector
 │   │   ├── formatter.py          # Centralized Telegram visual styling
 │   │   ├── schemas.py            # Pydantic Sources of Truth
-│   │   ├── config.py             # Deprecated Formerly `apps/manager/core/config.py`
-│   │   └── settings.py           # Master Pydantic Config (Environment Source of Truth)
+│   │   ├── settings.py           # Master Pydantic Config (Environment Source of Truth) 
+│   │   └── utils.py              # Shared Utility Functions (ProgressManager, gen_short_id)
 ...
 │   ├── stream-engine/            # Golang High-Performance Passthrough
 │       ├── core/

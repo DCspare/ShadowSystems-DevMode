@@ -57,26 +57,33 @@ async def leech_command(client, message):
 
         # Queue Logic
         if db_service.redis:
-            # ... extract vars ...
-            task_id = str(uuid.uuid4())[:8] # Short unique ID for this job
-
-            # Format: task_id|tmdb_id|url|type_hint|name_hint
-            payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}"
+            user_id = message.from_user.id
+            origin_chat_id = message.chat.id # <--- TRACK ORIGIN
+            limit_key = f"active_user_tasks:{user_id}"
             
-            # 1. Create a "Live Status" in Redis
+            # 1. Check Limits (Bypass if user is Owner OR Toggle is OFF)
+            if settings.ENABLE_USER_LIMITS and user_id != OWNER_ID:
+                active_count = await db_service.redis.scard(limit_key)
+                if active_count >= settings.MAX_TASKS_PER_USER:
+                    # Fetch IDs to show the user
+                    active_ids = await db_service.redis.smembers(limit_key)
+                    ids_str = ", ".join([f"`{i}`" for i in active_ids])
+                    return await message.reply_text(
+                        f"⚠️ **Limit Reached!**\n"
+                        f"You have `{active_count}` active tasks: {ids_str}\n\n"
+                        f"Please wait for them to finish or `/cancel` one to start a new task."
+                    )
+
+            # 2. Setup Task Identity
+            task_id = str(uuid.uuid4())[:8] # Short unique ID 
             status_key = f"task_status:{task_id}"
-            await db_service.redis.hset(status_key, mapping={
-                "name": name_hint or f"TMDB {tmdb_id}",
-                "status": "queued",
-                "progress": 0,
-                "tmdb_id": tmdb_id
-            })
-            # Expire status after 1 hour to keep Redis clean
-            await db_service.redis.expire(status_key, 3600)
 
-            # 2. Push to Queue
-            await db_service.redis.lpush("queue:leech", payload)
-            
+            # 3. Add to User's Active Set
+            await db_service.redis.sadd(limit_key, task_id)
+            # Auto-expire the set in 2 hours (Safety against zombie tasks)
+            await db_service.redis.expire(limit_key, 7200)
+
+            # 4. PREPARE THE REPLY TEXT
             # Generate Channel Link from Settings
             # Strip -100 for proper Deep Link
             clean_cid = str(settings.TG_LOG_CHANNEL_ID).replace("-100", "")
@@ -88,12 +95,12 @@ async def leech_command(client, message):
                 f"{'—' * 15}\n"
                 f"🆔 ID: `{task_id}`\n"
                 f"📦 Content: `{tmdb_id}` ({type_hint.upper()})\n"
-                f"📡 Status: `Pending in Queue...`\n"
+                f"📡 Status: `Added in Queue...`\n"
                 f"📜 Channel: [Open Log]({chan_link})"
             )
 
-            # --- 2. SEND THE REPLY ---
-            await message.reply_text(
+            # 5. SEND THE REPLY FIRST (To get the msg_id)
+            sent_msg = await message.reply_text(
                 response_text,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📊 View Queue Status", callback_data="check_status")]
@@ -101,6 +108,26 @@ async def leech_command(client, message):
                 disable_web_page_preview=True,
                 quote=True
             )
+
+            # 6. CREATE THE REDIS STATUS ENTRY (a "Live Status" in Redis)
+            await db_service.redis.hset(status_key, mapping={
+                "name": name_hint or f"TMDB {tmdb_id}",
+                "status": "queued",
+                "progress": 0,
+                "tmdb_id": tmdb_id,
+                "chat_id": str(message.chat.id),
+                "msg_id": str(sent_msg.id)
+            })
+            # Expire status after 1 hour to keep Redis clean
+            await db_service.redis.expire(status_key, 3600)
+
+            # 7. PAYLOAD & PUSH TO QUEUE
+            # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id
+            payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}"
+            
+
+            # 5. Push to Queue
+            await db_service.redis.lpush("queue:leech", payload)
             logger.info(f"Task dispatched: {payload}")
         else:
             await message.reply_text("❌ Redis Not Connected")
@@ -109,28 +136,39 @@ async def leech_command(client, message):
         logger.error(f"Leech Error: {e}")
         await message.reply_text(f"⚠️ Internal Error: {e}")
 
-# --- 2. THE CANCEL LOGIC ---
+# --- 2. THE CANCEL LOGIC (Smarter Check) ---
 @Client.on_message(filters.command("cancel") & filters.user(OWNER_ID))
 async def cancel_task(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("Usage: `/cancel task_id`")
+        return await message.reply_text("Usage: `/cancel task_id` or click link in status.")
     
     task_id = message.command[1]
     status_key = f"task_status:{task_id}"
     
-    # Check if task exists
-    if not await db_service.redis.exists(status_key):
-        return await message.reply_text("❌ Task not found or already finished.")
+    # Check status in Redis
+    data = await db_service.redis.hgetall(status_key)
+    active_statuses = ["queued", "downloading", "uploading"]
+
+    if not data or data.get("status") not in active_statuses:
+        return await message.reply_text(f"❌ **Task `{task_id}`** is not in an active state or doesn't exist.")
 
     # Set a Kill Flag in Redis
     await db_service.redis.set(f"kill_signal:{task_id}", "1", ex=300)
     await db_service.redis.hset(status_key, "status", "cancelling")
     
-    await message.reply_text(f"🛑 Kill signal sent to Task `{task_id}`. Waiting for Worker to abort...")
+    await message.reply_text(f"🛑 Kill signal sent to Task `{task_id}`. Waiting for Worker to Abort...")
+
+# Enables clicking /cancel_ID directly from the status message
+@Client.on_message(filters.regex(r"^/cancel_([a-fA-F0-9]+)") & filters.user(OWNER_ID))
+async def quick_cancel(client, message):
+    task_id = message.matches[0].group(1)
+    # Redirect to the main cancel logic
+    message.command = ["cancel", task_id]
+    await cancel_task(client, message)
 
 # --- THE STATUS LOGIC (Shared by Command and Button) ---
 async def build_status_text():
-    """Generates the text for /status and callback"""
+    """Generates a clean, professional view for /status and callback"""
     if not db_service.redis:
         return "❌ Redis Offline"
 
@@ -147,7 +185,10 @@ async def build_status_text():
         progress = data.get("progress", "0") or "0"
         name = data.get("name", "Unknown Content")
         
-        if status not in ["COMPLETED", "CANCELLED"]:
+        # Only show truly active tasks
+        # This hides 'CANCELLING', 'COMPLETED', and 'FAILED' from cluttering the list
+        if status in ["QUEUED", "DOWNLOADING", "UPLOADING"]:
+
             # Better Progress Bar Logic
             try:
                 prog_int = int(float(progress))
@@ -156,10 +197,16 @@ async def build_status_text():
             except: 
                 progress_bar = f" ({progress}%)"
             
+            # Cleaner Labels (No double ID)
+            # Format: ⚡ Content Name 
+            #           └ 🛠️ Status:
+            #           └ 🆔 ID:
+            #           └ 🛑 /cancel_task_id
             active_lines.append(
-                f"⚡ `{task_id}`: **{name}**\n"
-                f"   └ 🛠️ {status}{progress_bar}\n"
-                f"   └ 🛑 Abort: `/cancel {task_id}`"
+                f"⚡ **{name}**\n"
+                f"   └ 🛠️ Status: `{status}`{progress_bar}\n"
+                f"   └ 🆔 ID: `{task_id}`\n"
+                f"   └ 🛑 /cancel_{task_id}"
             )
 
     queue_items = await db_service.redis.lrange("queue:leech", 0, -1)
@@ -187,7 +234,7 @@ async def status_cmd_handler(client, message):
     except Exception as e:
         await message.reply_text(f"❌ Status Error: {e}")
 
-# --- 4. CALLBACK HANDLER (The Button Fix) ---
+# --- 4. CALLBACK HANDLER ---
 @Client.on_callback_query(filters.regex("check_status"))
 async def status_callback_handler(client, callback_query):
     """Triggered when user clicks 'View Queue Status' button"""
@@ -199,14 +246,21 @@ async def status_callback_handler(client, callback_query):
         status_text = await build_status_text()
         
         # Edit the existing message to show status
-        await callback_query.message.edit_text(
-            status_text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh Status", callback_data="check_status")]
-            ])
-        )
-        # Answer the callback to remove the loading spinner
-        await callback_query.answer()
+        try:
+            await callback_query.message.edit_text(
+                status_text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Refresh Status", callback_data="check_status")]
+                ])
+            )
+            # Answer the callback to remove the loading spinner
+            await callback_query.answer("Status Updated")
+        except Exception as edit_err:
+            # Telegram throws error if you try to edit with EXACT same text
+            if "MESSAGE_NOT_MODIFIED" in str(edit_err):
+                await callback_query.answer("Already Up to date ✅")
+            else: raise edit_err
+
     except Exception as e:
         logger.error(f"Callback Error: {e}")
-        await callback_query.answer("⚠️ Could not fetch status")
+        await callback_query.answer("⚠️ System Busy. Try again.")

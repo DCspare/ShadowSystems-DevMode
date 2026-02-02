@@ -73,8 +73,9 @@ class AppSettings(BaseSettings):
     # Branding String for filenames (e.g. "[ShadowSystems]")
     FILE_BRANDING_TAG: str = "[ShadowSystem]"
     
-    # Max downloads parallel per container (Queue limit)
-    WORKER_CONCURRENCY: int = 3
+    # --- QUEUE & LIMITS ---
+    ENABLE_USER_LIMITS: bool = False  # Set to True for public bots
+    MAX_TASKS_PER_USER: int = 3
 
     # ==========================================
     # 🎥 3RD PARTY INTEGRATIONS

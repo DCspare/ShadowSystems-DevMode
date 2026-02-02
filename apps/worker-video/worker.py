@@ -96,16 +96,12 @@ class VideoWorker:
         # 0. Safety Cleanup
         self.clean_slate()
         
-        # 1. DB
+        # 1. DB (Persistence Layer)
         mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
         self.db = mongo_client["shadow_systems"]
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
-        
-        # 2. Downloader
-        self.start_aria2_daemon()
-        await downloader.initialize()
 
-        # 3. Telegram Init
+        # 2. Telegram Identity
         logger.info("Initializing Pyrogram Client...")
         is_bot_mode = os.getenv("WORKER_MODE", "BOT") == "BOT"
 
@@ -128,9 +124,23 @@ class VideoWorker:
                 api_hash=settings.TG_API_HASH,
                 workdir="/app/sessions"
             )
+        
+        # 3. Initialize Leecher
+        self.leecher = MediaLeecher(self.app, self.db, self.redis)
+
+        # 4. Initialize Downloader with THE BRIDGE
+        self.start_aria2_daemon()
+        await downloader.initialize(
+            redis=self.redis, 
+            ui_callback=self.leecher.update_tg_ui # <--- THE BRIDGE
+        )
+
+        # 5. Start Telegram and resolve peer 
+        await self.app.start()
+        logger.info(f"Worker fully operational as @{(await self.app.get_me()).username}")
 
         # ---------------------------------------------
-        # MANUAL HEALTH CHECK COMMAND
+        # 6. MANUAL HEALTH CHECK COMMAND
         # ---------------------------------------------
         @self.app.on_message(filters.command("health"))
         async def health_check(client, message):
@@ -153,10 +163,7 @@ class VideoWorker:
             # self.log_channel = message.chat.id
             logger.info(f"Health Check successful. Session validated: {message.chat.title}")
 
-        # 4. Start
-        await self.app.start()
-        
-        # 5. Safe Peer Resolution
+        # 7.. Safe Peer Resolution
         # We try to get_chat. If it fails, we rely on the manual /health command 
         # to "Wake up" the caching layer later.
         try:
@@ -173,8 +180,6 @@ class VideoWorker:
             logger.warning(f"⚠️ Automatic Handshake failed: {e}")
             logger.warning("👉 ACTION: Send '/health' in the Log Channel/Group to fix cache!")
 
-        self.leecher = MediaLeecher(self.app, self.db, self.redis)
-        logger.info(f"Worker fully operational as @{(await self.app.get_me()).username}")
 
     async def task_watcher(self):
         """Watch Redis"""
@@ -186,13 +191,16 @@ class VideoWorker:
                     payload = task[1]
                     logger.info(f"Consumed task: {payload}")
                     try:
-                        # NEW FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name
+                        # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id
                         parts = payload.split("|")
                         task_id = parts[0]
                         tmdb_id = parts[1]
                         raw_url = parts[2]
                         type_hint = parts[3] if len(parts) > 3 else "auto"
                         name_hint = parts[4] if len(parts) > 4 else ""
+                        # Capture user_id (fallback to 0 if old payload)
+                        req_user_id = parts[5] if len(parts) > 5 else "0"
+                        origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
 
                         # Update Status to 'Downloading'
                         status_key = f"task_status:{task_id}"
@@ -206,7 +214,7 @@ class VideoWorker:
                             await self.redis.hset(status_key, "status", "error: invalid_url")
                             continue # Skip to next task
 
-                        local_path = await downloader.start_download(target_info)
+                        local_path = await downloader.start_download(target_info, task_id=task_id)
                         
                         if local_path and os.path.exists(local_path):
                             
@@ -227,7 +235,9 @@ class VideoWorker:
                                 local_path, 
                                 int(tmdb_id),
                                 type_hint=type_hint,
-                                task_id=task_id
+                                task_id=task_id,
+                                user_id=req_user_id,
+                                origin_chat_id=int(origin_chat_id)
                             )
 
                             # 3. Clean

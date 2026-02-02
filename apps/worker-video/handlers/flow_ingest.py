@@ -14,6 +14,8 @@ from shared.database import db_service
 from pyrogram.file_id import FileId
 from handlers.processor import processor
 from shared.formatter import formatter 
+from shared.utils import ProgressManager 
+from pyrogram import StopTransmission
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
 logger = logging.getLogger("Leecher")
@@ -24,6 +26,7 @@ class MediaLeecher:
         self.db = db
         # Use passed redis, fallback to shared service singleton
         self.redis = redis or db_service.redis
+        self.last_edit_time = 0 # <--- Track time for throttling
 
         # ✨ CLEAN CONFIG USAGE
         self.gen_samples = settings.GENERATE_SAMPLES
@@ -201,30 +204,71 @@ class MediaLeecher:
         
         return None
 
+# --- 1. UNIVERSAL UI METHOD ---
+    async def update_tg_ui(self, task_id, pct, status_text="Processing"):
+        """Throttled Telegram Message Editor shared by Download & Upload"""
+        now = time.time()
+        # Throttled to 6 seconds to avoid Telegram Flood Bans
+        if now - getattr(self, 'last_edit_time', 0) > 6:
+            try:
+                status_key = f"task_status:{task_id}"
+                data = await self.redis.hgetall(status_key)
+                chat_id = data.get("chat_id")
+                msg_id = data.get("msg_id")
+
+                if chat_id and msg_id:
+                    filled = min(max(int(pct) // 10, 0), 10)
+                    bar = f"[{'■' * filled}{'□' * (10 - filled)}]"
+                    
+                    await self.client.edit_message_text(
+                        chat_id=int(chat_id),
+                        message_id=int(msg_id),
+                        text=f"⚡ **{status_text}...**\n`{bar}` {pct}%\n🆔 ID: `{task_id}`"
+                    )
+                    self.last_edit_time = now
+            except Exception:
+                pass # Ignore "Message Not Modified" or Telegram transient errors
+
     async def upload_progress(self, current, total):
         if total > 0:
             pct = int(current * 100 / total)
-            # Safe checking for _last_log attribute
-            if pct % 10 == 0 and pct != getattr(self, '_last_log', -1):
-                logger.info(f"📤 Upload: {pct}%")
-                self._last_log = pct
 
-                # --- UPDATE REDIS PROGRESS ---
-                if hasattr(self, 'current_task_id') and self.current_task_id:
-                    status_key = f"task_status:{self.current_task_id}"
-                    # Check if redis exists before calling
-                    if self.redis:
-                        await self.redis.hset(status_key, "progress", pct)
+            # 1. Always update Redis (for the /status command)
+            if hasattr(self, 'current_task_id') and self.current_task_id:
+                # Update Redis for /status
+                await self.redis.hset(f"task_status:{self.current_task_id}", "progress", pct)
+
+                # Update Telegram UI
+                await self.update_tg_ui(self.current_task_id, pct, "Uploading")
+
+                # 2. ✅ NEW: Docker-Safe Terminal Logging (Pure Flush)
+                # Only print every 10% to prevent buffer flooding
+                if pct % 10 == 0 and pct != getattr(self, '_last_terminal_pct', -1):
+                    self._last_terminal_pct = pct
+                    bar = ProgressManager.get_bar(pct)
+                    sys.stdout.write(f"📤 [UP] {pct}% {bar} | ID: {self.current_task_id}\n")
+                    sys.stdout.flush()
+
+                # 3. Throttled Telegram UI Update (Keep the 6s timer here)
+                now = time.time()
+                if now - getattr(self, 'last_edit_time', 0) > 6:
+                    await self.update_tg_ui(self.current_task_id, pct, "Uploading")
+                    self.last_edit_time = now
                     
-                    # --- MID-UPLOAD KILL SWITCH ---
-                    kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
-                    if kill_check:
-                        logger.warning(f"🛑 Kill signal received during upload for {self.current_task_id}!")
-                        raise Exception("ABORTED_BY_SIGNAL")
+                # 4. MID-UPLOAD KILL SWITCH (Pyrogram Native) ---
+                kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
+                if kill_check:
+                    logger.warning(f"🛑 Kill signal received during upload for {self.current_task_id}!")
+                    # This is the official way to stop Pyrogram without socket errors
+                    raise StopTransmission("ABORTED_BY_SIGNAL")
 
-    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None):
+    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None, user_id: str = "0", origin_chat_id: int = None):
         # SAFETY INIT: Variables must exist before TRY block
         self.current_task_id = task_id
+        self.current_user_id = user_id
+        # Use origin if provided, fallback to default log channel
+        self.notify_chat = origin_chat_id or self.log_channel
+
         current_file_path = file_path
         cleanup_targets = [file_path]
         
@@ -237,8 +281,8 @@ class MediaLeecher:
                     logger.info(f"🛑 Kill signal detected for {task_id}. Aborting.")
                     raise Exception("TASK_CANCELLED_BY_USER")
             
-            # Update status to 'uploading'
-            await self.redis.hset(f"task_status:{task_id}", "status", "uploading")
+                # Update status to 'uploading'
+                await self.redis.hset(f"task_status:{task_id}", "status", "uploading")
 
             file_name = os.path.basename(current_file_path)
 
@@ -366,6 +410,7 @@ class MediaLeecher:
             # 5. Main Upload (With Fancy Caption)
             logger.info("🚀 Uploading Main Video...")
             self._last_log = -1
+            self._last_terminal_pct = -1 # Reset for terminal
             
             video_msg = await self.client.send_document(
                 chat_id=self.log_channel,
@@ -375,6 +420,11 @@ class MediaLeecher:
                 force_document=True,
                 progress=self.upload_progress
             )
+
+            # If task was cancelled, video_msg is None.
+            if video_msg is None:
+                logger.info(f"⚠️ Upload aborted for task {task_id}. Skipping indexing.")
+                return False 
 
             # Store the Video Message ID securely
             main_msg_id = video_msg.id
@@ -551,19 +601,20 @@ class MediaLeecher:
 
             return True
 
-        except Exception as e:
+        except (StopTransmission, Exception) as e:
             err_str = str(e)
 
-            # 1. Handle Cancellation specifically
-            if "ABORTED_BY_SIGNAL" in err_str or "TASK_CANCELLED" in err_str:
-                logger.warning(f"🛑 Task {task_id} gracefully stopped via Kill Switch.")
+            # 1. Handle Clean Aborts (User Cancelled)
+            if isinstance(e, StopTransmission) or "ABORTED_BY_SIGNAL" in err_str or "TASK_CANCELLED" in err_str:
+                logger.warning(f"🛑 Task {task_id} gracefully stopped.")
                 if task_id and self.redis:
                     await self.redis.hset(f"task_status:{task_id}", "status", "cancelled")
 
-                # 📢 NOTIFY USER VIA TELEGRAM
+                # 📢 NOTIFY USER VIA THE ORIGIN CHAT
+                target_chat = getattr(self, 'notify_chat', self.log_channel)
                 try:
                     await self.client.send_message(
-                        chat_id=self.log_channel,
+                        chat_id=target_chat, # <--- REDIRECTED
                         text=(
                             f"🛑 **Task Aborted**\n"
                             f"🆔 ID: `{task_id}`\n"
@@ -572,25 +623,35 @@ class MediaLeecher:
                     )
                 except Exception as notify_err:
                     logger.error(f"Failed to send cancellation msg: {notify_err}")
+
+            # 2. Catch & Silence the Pyrogram 'NoneType' write noise
+            elif "'NoneType' object has no attribute 'write'" in err_str:
+                logger.debug("Silenced Pyrogram session cleanup noise.")
             
-            # 2. Handle Real Errors (Crashes/Network)
+            # 3. Handle Real Errors (Crashes/Network)
             else:
                 logger.error(f"Critical Leech Fail: {e}")
-                if task_id and self.redis:
-                    await self.redis.hset(f"task_status:{task_id}", "status", f"failed: {error_str[:20]}")
-                
-                # Optional: Notify of failure
-                await self.client.send_message(
-                    chat_id=self.log_channel,
-                    text=f"❌ **Task Failed**\nID: `{task_id}`\nError: `{error_str[:50]}`"
-                )
+                target_chat = getattr(self, 'notify_chat', self.log_channel)
+                try:
+                    await self.client.send_message(
+                        chat_id=target_chat,
+                        text=f"❌ **Task Failed**\n🆔 ID: `{task_id or 'unknown'}`\nError: `{err_str[:50]}`"
+                    )
+                except: pass
                 
             return False
+            logger.error(f"Critical Leech Fail: {e}")
         
         finally:
             # 9. Robust Cleanup
             # Force close potential pyrogram file handlers by waiting a moment
             await asyncio.sleep(2.0)
+
+            # --- RELEASE USER SLOT ---
+            if task_id and user_id != "0" and self.redis:
+                limit_key = f"active_user_tasks:{user_id}"
+                await self.redis.srem(limit_key, task_id)
+                logger.info(f"🔓 Slot released for User {user_id} (Task {task_id})")
 
             # Master List: Init path + Current path + Screenshots
             targets = set(cleanup_targets)
