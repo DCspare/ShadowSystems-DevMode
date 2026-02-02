@@ -118,3 +118,4 @@ async def health_check():
 @app.get("/")
 async def root():
     return {"message": "Shadow Manager API Level 2026 active"}
+    

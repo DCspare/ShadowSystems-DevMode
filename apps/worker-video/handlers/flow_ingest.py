@@ -9,10 +9,11 @@ import aiohttp
 import asyncio
 sys.path.append("/app/shared")
 from pyrogram import Client, enums
-from shared.settings import settings
 from pyrogram.file_id import FileId
-from handlers.processor import processor
+from shared.settings import settings
 from shared.formatter import formatter 
+from shared.progress import progress_bar
+from handlers.processor import processor
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
 logger = logging.getLogger("Leecher")
@@ -198,18 +199,26 @@ class MediaLeecher:
         
         return None
 
-    async def upload_progress(self, current, total):
-        if total > 0:
-            pct = int(current * 100 / total)
-            # Safe checking for _last_log attribute
-            if pct % 20 == 0 and pct != getattr(self, '_last_log', -1):
-                logger.info(f"📤 Upload: {pct}%")
-                self._last_log = pct
+    async def upload_hook(self, current, total):
+        # We assume self._upload_start_time was set before call
+        progress_bar.log(current, total, "Uploading", self._upload_start_time)
+        # We need a start_time state.
+        # Ideally, we set self._upload_start_time before calling send_document
+        if not hasattr(self, '_upload_start_time'):
+             self._upload_start_time = time.time()
+             
+        progress_bar.log(current, total, desc="Uploading TG", start_time=self._upload_start_time)
 
     async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto"):
         # SAFETY INIT: Variables must exist before TRY block
         current_file_path = file_path
         cleanup_targets = [file_path]
+
+        # 🛡️ DEFINE SCOPE VARIABLES HERE
+        # Prevents "referenced before assignment" if try block fails early
+        # or if logic paths skip initialization
+        s_num = None
+        e_num = None
         
         try:
             file_name = os.path.basename(current_file_path)
@@ -290,7 +299,10 @@ class MediaLeecher:
                 meta, 
                 file_name, 
                 db_entry=db_item,
-                episode_meta=ep_meta # <--- PASS THIS TO FORMATTER
+                episode_meta=ep_meta,
+                # Explicitly pass what we found during normalization/PTN
+                manual_s=s_num, 
+                manual_e=e_num
             )
             buttons = formatter.build_buttons(db_item.get('short_id', ''))
 
@@ -310,6 +322,9 @@ class MediaLeecher:
             # 5. Main Upload (With Fancy Caption)
             logger.info("🚀 Uploading Main Video...")
             self._last_log = -1
+
+            # Reset Timer
+            self._upload_start_time = time.time()
             
             video_msg = await self.client.send_document(
                 chat_id=self.log_channel,
@@ -317,7 +332,7 @@ class MediaLeecher:
                 caption=clean_caption, # <--- The Professional Text
                 reply_markup=buttons,
                 force_document=True,
-                progress=self.upload_progress
+                progress=self.upload_hook 
             )
 
             # Store the Video Message ID securely
@@ -396,7 +411,11 @@ class MediaLeecher:
             doc = video_msg.document
             decoded = FileId.decode(doc.file_id)
             
+            # 🟢 CRITICAL: Re-establish Season Logic for DB
+            # We already have correct filename now
             ptn = PTN.parse(file_name)
+            current_media_type = db_item.get('media_type', 'movie')
+            s_num, e_num, _ = await self.normalize_episode_mapping(int(tmdb_id), ptn, current_media_type, file_name)
             
             # --- STRUCTURE 1: The Raw File Data (All Media Types) ---
             db_file_entry = {
@@ -491,26 +510,25 @@ class MediaLeecher:
             return False
         
         finally:
-            # 9. Robust Cleanup
-            # Force close potential pyrogram file handlers by waiting a moment
-            await asyncio.sleep(2.0)
-
-            # Master List: Init path + Current path + Screenshots
-            targets = set(cleanup_targets)
-            if 'current_file_path' in locals():
-                targets.add(current_file_path)
+            # Note: This is safe because "Potato Mode" runs one task at a time.
             
-            logger.info(f"🧹 Scrubbing {len(targets)} items...")
-
-            for f in targets:
-                # Resolve Absolute Path just in case
-                abs_path = os.path.abspath(f)
-                
-                if os.path.exists(abs_path): 
+            # 9. Nuclear Cleanup
+            # Wipes the entire download directory contents
+            await asyncio.sleep(1.0)
+            
+            dl_dir = "/app/downloads"
+            count = 0
+            
+            if os.path.exists(dl_dir):
+                logger.info("☢️ NUKING DOWNLOADS FOLDER...")
+                for filename in os.listdir(dl_dir):
+                    file_path = os.path.join(dl_dir, filename)
                     try:
-                        # Attempt standard remove
-                        os.remove(abs_path)
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.remove(file_path)
+                            count += 1
+                        # We don't remove dirs here typically, but we could if needed
                     except Exception as e:
-                        logger.error(f"❌ Failed to delete {os.path.basename(abs_path)}: {e}")
+                        logger.error(f"❌ Nuke Failed for {filename}: {e}")
             
-            logger.info("✅ Cleanup phase done.")
+            logger.info(f"🧹 Scrubbed {count} residue files.")
