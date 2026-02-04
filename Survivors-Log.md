@@ -244,3 +244,23 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 - **The Error:** `HTTP 422 Unprocessable Entity`.
 - **Description:** A request to `/subtitle/{file_id}/index3.vtt` failed because the route expected an `int` for the index. The string "index3" could not be cast to an integer.
 - **The Fix:** Corrected the frontend/CURL calling pattern to pass only the integer (e.g., `/subtitle/{file_id}/3.vtt`). Strictly enforced integer type-hinting in FastAPI to prevent command injection.
+
+#### 🧱 Hurdle #42: The Peer Resolution Wall
+- **The Error:** `Peer id invalid` or `400 BOT_METHOD_INVALID`.
+- **Description:** Fresh Docker sessions lacked the "Access Hash" for private log channels. Bots are restricted from using `GetDialogs` to sync these hashes.
+- **The Fix:** Implemented the "Silent Pulse" protocol. The worker now attempts a sequence of `send_chat_action`, `get_chat_history`, and `get_chat_member` on startup. This forces Telegram to push the peer data to the bot, caching the hash in the local session database autonomously.
+
+#### 🧱 Hurdle #43: The "NoneType" Socket Interruption
+- **The Error:** `AttributeError: 'NoneType' object has no attribute 'write'` or `'id'`.
+- **Description:** Forcefully raising exceptions inside Pyrogram progress callbacks interrupted the MTProto transport layer, leading to crashes during cleanup or indexing.
+- **The Fix:** Adopted the official `StopTransmission` signal for graceful socket closure. Added "Late-Binding" scope checks using `locals().get()` and `if video_msg is None` guards to ensure the worker skips indexing and proceeds to cleanup without crashing if a task is aborted mid-flight.
+
+#### 🧱 Hurdle #44: The Async Heartbeat Race
+- **The Error:** `UnboundLocalError: local variable 'task_id'` or UI jumping to 100%.
+- **Description:** High-frequency updates from synchronous download threads (`yt-dlp`) were overwhelming the `asyncio` event loop, causing logs to buffer and skip.
+- **The Fix:** Decoupled the UI from the Worker threads. Engines now perform thread-safe dictionary updates to a global Registry. A separate background "Heartbeat" loop snapshots the Registry and performs throttled Telegram edits, ensuring UI stability and preventing FloodWait bans.
+
+#### 🧱 Hurdle #45: The Ghost Message Persistence
+- **The Error:** Status message remains in chat after all tasks are finished.
+- **Description:** The loop lacked logic to detect an empty registry and perform self-destruction of the status entity.
+- **The Fix:** Implemented a "Master Purge" in the worker's `finally` block and a "Lifecycle Watcher" in the `StatusManager`. The manager now detects `count == 0`, deletes the active status message, and enters a dormant state until a new task is registered.

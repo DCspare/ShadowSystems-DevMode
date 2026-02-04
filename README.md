@@ -48,9 +48,11 @@ SHADOW-SYSTEMS (Root)
 │   │   ├── __init__.py
 │   │   ├── database.py           # Shared DB Connector
 │   │   ├── formatter.py          # Centralized Telegram visual styling
+│   │   ├── progress.py           # Progress Tracking Logic
+│   │   ├── registry.py           # Shared Container Registry
 │   │   ├── schemas.py            # Pydantic Sources of Truth
 │   │   ├── settings.py           # Master Pydantic Config (Environment Source of Truth) 
-│   │   └── utils.py              # Shared Utility Functions (ProgressManager, gen_short_id)
+│   │   └── utils.py              # Shared Utility Functions
 ...
 │   ├── stream-engine/            # Golang High-Performance Passthrough
 │       ├── core/
@@ -67,7 +69,8 @@ SHADOW-SYSTEMS (Root)
 │       ├── handlers/             # Logic Pipelines
 │       │   ├── downloader.py     # Hybrid Aria2 + Native HTTP Engine
 │       │   ├── flow_ingest.py    # Identity Sanitization & Transfer Core (Formerly leech.py)
-│       │   └── processor.py      # FFmpeg Media & Screenshot Engine
+│       │   ├── processor.py      # FFmpeg Media & Screenshot Engine
+│       │   └── Status_manager.py #
 │       ├── Dockerfile            # Python 3.12 Media Image
 │       ├── entrypoint.sh
 │       ├── requirements.txt      # Version-pinned Media Libs
@@ -180,6 +183,14 @@ SHADOW-SYSTEMS (Root)
 - [x] **On-the-Fly Subtitle Bridge:** Built a high-performance FFmpeg pipe that extracts "Soft Subtitles" from MKV streams and serves them as `.vtt` to web browsers via an internal header-authenticated Go bridge.
 - [x] **Task-UUID Queue Logic:** Upgraded the Redis pipeline to support unique Task IDs, allowing live status tracking and remote "Kill Signals" for specific downloads.
 
+### 💎 Achievements (v0.6.5-alpha) - The Industrial Milestone
+- [x] **Shadow Status Registry:** Migrated to a centralized "Registry Pattern." All engines (Download/Upload/Mirror) now report to a global state, enabling a unified UI.
+- [x] **MLTB-Standard UI:** Implemented a professional "Heartbeat" loop that updates one single Telegram message every 6 seconds with live CPU/RAM/Disk stats and multi-task progress bars.
+- [x] **Smooth EMA Math:** Integrated Exponential Moving Average (EMA) logic for speed calculations, resulting in rock-solid ETA and jitter-free MB/s reporting.
+- [x] **Deep-Probe Handshake:** Developed an autonomous peer resolution protocol that force-caches Access Hashes on boot using silent pulses, eliminating the need for manual `/health` commands.
+- [x] **Stealth Operational UX:** Implemented "Silent Manager" logic where bot commands triggered in groups are acknowledged in Private DM, and trigger messages are auto-deleted upon task completion to maintain zero clutter.
+- [x] **Dynamic Engine Switching:** Automated engine labeling (Aria2 vs YT-DLP) within the Status UI based on link metadata.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -216,19 +227,19 @@ docker compose -f docker-compose.dev.yml down
 
 ## 🛠 The Hurdle Log: Challenges & Resolutions
 *The **"Shadow Survivor's Log"**. It documents every technical roadblock we encountered during Phase 1 & 2 in the Google Project IDX environment and the exact "Shadow Protocol" fixes we applied.*
-#### 🧱 Hurdle #40: The Internal Header Bridge
-- **The Error:** `HTTP 400 Bad Request` or `500 Internal Error` when calling subtitles.
-- **Description:** The Manager API (Python) tried to call the Go Stream Engine directly. However, the Go Engine requires `X-Location-Msg-ID` headers to find the Telegram file. Since the browser doesn't send these, the request failed.
-- **The Fix:** Implemented a "Smart Resolver" in `library.py`. The Manager now fetches the location data from MongoDB first, then injects those headers into the `subprocess.Popen` FFmpeg command via the `-headers` flag.
+#### 🧱 Hurdle #44: The Async Heartbeat Race
+- **The Error:** `UnboundLocalError: local variable 'task_id'` or UI jumping to 100%.
+- **Description:** High-frequency updates from synchronous download threads (`yt-dlp`) were overwhelming the `asyncio` event loop, causing logs to buffer and skip.
+- **The Fix:** Decoupled the UI from the Worker threads. Engines now perform thread-safe dictionary updates to a global Registry. A separate background "Heartbeat" loop snapshots the Registry and performs throttled Telegram edits, ensuring UI stability and preventing FloodWait bans.
 
-#### 🧱 Hurdle #41: FastAPI Type-Strictness (Parsing Fail)
-- **The Error:** `HTTP 422 Unprocessable Entity`.
-- **Description:** A request to `/subtitle/{file_id}/index3.vtt` failed because the route expected an `int` for the index. The string "index3" could not be cast to an integer.
-- **The Fix:** Corrected the frontend/CURL calling pattern to pass only the integer (e.g., `/subtitle/{file_id}/3.vtt`). Strictly enforced integer type-hinting in FastAPI to prevent command injection.
+#### 🧱 Hurdle #45: The Ghost Message Persistence
+- **The Error:** Status message remains in chat after all tasks are finished.
+- **Description:** The loop lacked logic to detect an empty registry and perform self-destruction of the status entity.
+- **The Fix:** Implemented a "Master Purge" in the worker's `finally` block and a "Lifecycle Watcher" in the `StatusManager`. The manager now detects `count == 0`, deletes the active status message, and enters a dormant state until a new task is registered.
 
 for all Hurdles check: [Survivors Log](Survivors-Log.md)
 
 ---------
 
-*Last Updated: 2026-02-01*
-*Time: 12:09pm*
+*Last Updated: 04-02-2026*
+*Time: 06:46pm*
