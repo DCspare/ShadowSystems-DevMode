@@ -73,8 +73,13 @@ class AppSettings(BaseSettings):
     # Branding String for filenames (e.g. "[ShadowSystems]")
     FILE_BRANDING_TAG: str = "[ShadowSystem]"
     
-    # Max downloads parallel per container (Queue limit)
-    WORKER_CONCURRENCY: int = 3
+    # ==========================================
+    # 🛡️ QUEUE & LIMITS (Shadow-MLB)
+    # ==========================================
+    ENABLE_USER_LIMITS: bool = False # set True for public launch
+    MAX_TASKS_PER_USER: int = 3
+    MAX_TOTAL_TASKS: int = 10
+    STATUS_UPDATE_INTERVAL: int = 6 # Seconds
 
     # ==========================================
     # 🎥 3RD PARTY INTEGRATIONS
@@ -85,6 +90,12 @@ class AppSettings(BaseSettings):
     # Monetization (Ads)
     ADSTERRA_PID: Optional[str] = None
     SHORTENER_API_TOKEN: Optional[str] = None
+
+    # ==========================================
+    # 🔗 MIRROR / DAISY-CHAIN KEYS
+    # ==========================================
+    PIXELDRAIN_API_KEY: Optional[str] = None
+    VIDHIDE_API_KEY: Optional[str] = None
     
     # ==========================================
     # 🛠️ CONFIG LOADERS

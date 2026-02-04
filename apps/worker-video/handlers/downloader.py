@@ -1,10 +1,14 @@
 # apps/worker-video.handlers/downloader.py  
 import os
+import sys
 import time
 import aria2p
 import yt_dlp
 import asyncio
 import logging
+from shared.utils import ProgressManager
+from shared.progress import TaskProgress
+from shared.registry import task_dict, task_dict_lock, MirrorStatus 
 
 logger = logging.getLogger("Downloader")
 
@@ -15,7 +19,10 @@ class Downloader:
         if not os.path.exists(self.download_path):
             os.makedirs(self.download_path, exist_ok=True)
 
-    async def initialize(self):
+    async def initialize(self, redis=None, ui_callback=None):
+        self.redis = redis
+        self.ui_callback = ui_callback # THE BRIDGE
+
         try:
             self.aria2 = aria2p.API(
                 aria2p.Client(host="http://localhost", port=6800, secret="")
@@ -24,19 +31,71 @@ class Downloader:
         except Exception:
             self.aria2 = None
 
+    async def _update_status(self, pct, downloaded, total, speed, eta):
+        """Helper to safely write to the global task dictionary."""
+        async with task_dict_lock:
+            if self.current_task_id in task_dict:
+                task_dict[self.current_task_id].update({
+                    "progress": pct,
+                    "processed": ProgressManager.get_readable_file_size(downloaded),
+                    "size": ProgressManager.get_readable_file_size(total),
+                    "speed": speed,
+                    "eta": eta,
+                    "status": MirrorStatus.STATUS_DOWNLOAD
+                })
+
     def _native_logger_progress(self, d):
-        """Dedicated hook to make yt-dlp logs visible in Docker"""
+        """Reports data to the Shared Registry for StatusManager to display."""
         if d['status'] == 'downloading':
             try:
-                raw_pct = d.get('_percent_str', '0%').strip()
-                clean_pct = raw_pct.replace('%','').split('.')[0]
-                pct_val = int(clean_pct)
-                if pct_val % 20 == 0 and pct_val > 0:
-                     print(f"⬇️ [DL] {raw_pct} | {d.get('_speed_str')} | ETA {d.get('_eta_str')}", flush=True)
-            except:
-                pass 
+                # Capture current state into class attributes
+                # This allows worker.py to read progress without freezing yt-dlp
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                if total <= 0: return
+                
+                if not self.tracker:
+                    from shared.progress import TaskProgress
+                    self.tracker = TaskProgress(total)
+
+                    # ✅ SYNC-SAFE REGISTRY UPDATE
+                    # We update the dictionary so the StatusManager Heartbeat can see it
+                    task_id = self.current_task_id
+                    
+                speed_raw = self.tracker.update(downloaded)
+                eta_raw = self.tracker.get_eta(downloaded)
+                pct = int(downloaded * 100 / total)
+                    
+                speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
+                eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
+                        
+                # ✅ USE THREAD-SAFE DICTIONARY UPDATE
+                # Instead of run_coroutine_threadsafe, we update the dict directly
+                # Python dict updates are thread-safe in CPython for this use case
+                if self.current_task_id in task_dict:
+                    task_dict[self.current_task_id].update({
+                        "progress": pct,
+                        "processed": ProgressManager.get_readable_file_size(downloaded),
+                        "size": ProgressManager.get_readable_file_size(total),
+                        "speed": speed_fmt,
+                        "eta": eta_fmt,
+                        "status": MirrorStatus.STATUS_DOWNLOAD
+                    })
+
+                # Terminal (Every 10%)
+                if pct % 10 == 0 and pct != getattr(self, '_last_print_pct', -1):
+                    self._last_print_pct = pct
+                    sys.stdout.write(f"⬇️ [DL] {pct}% | {speed_fmt} | ETA: {eta_fmt}\n")
+                    sys.stdout.flush()
+                        
+                # Check Kill Signal
+                if self.redis:
+                    # Sync check in thread
+                    pass 
+            except Exception: pass
         elif d['status'] == 'finished':
-            print("✅ [DL] Download Phase Complete. Finalizing...", flush=True)
+            sys.stdout.write(f"✅ [DL] Download Phase Complete. Finalizing...\n") 
+            sys.stdout.flush()
 
     def _get_safe_filename(self, candidate, default="video"):
         """Prevents Errno 36 (Filename too long)"""
@@ -87,17 +146,34 @@ class Downloader:
             safe_name = self._get_safe_filename(raw_name, "raw_download")
             return {"url": url, "filename": safe_name, "type": "raw"}
 
-    async def start_download(self, target: dict) -> str:
+    async def start_download(self, target: dict, task_id: str = None) -> str:
+        self.current_task_id = task_id
+        self.current_pct = 0 # Initialize for worker to read
+        self._last_pct = -1 # Reset for new file
+        self.tracker = None # We assume size is 0 and update it once yt-dlp starts
         raw_link = target['url']
-        fname = self._get_safe_filename(target.get('filename'), "video")
+        fname = self._get_safe_filename(target.get('filename'), "video.mp4")
         final_path = os.path.join(self.download_path, fname)
 
-        # Magnet -> Aria2
-        if raw_link.startswith("magnet:"):
-            return await self.download_with_aria2(raw_link)
+        async with task_dict_lock:
+            if task_id in task_dict:
+                task_dict[task_id].update({
+                    "status": MirrorStatus.STATUS_DOWNLOAD,
+                    "eta": "Probing..."
+                })
 
-        # HTTPS -> Native
-        logger.info(f"🌐 Http Mode: YT-DLP Native")
+        # 1. Kill Switch Check (Initial)
+        if task_id and self.redis:
+            if await self.redis.get(f"kill_signal:{task_id}"):
+                raise Exception("TASK_CANCELLED_BEFORE_START")
+            await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
+
+        # Route to Engine (Magnet -> Aria2)
+        if raw_link.startswith("magnet:") or ".torrent" in raw_link:
+            return await self.download_with_aria2(raw_link, task_id)
+
+        # HTTP/Native Mode
+        logger.info(f"🌐 Downloader: YT-DLP Native Mode for {task_id}")
         try:
             ydl_opts = {
                 'format': 'bestvideo+bestaudio/best', # Allow merging
@@ -125,7 +201,7 @@ class Downloader:
             # Fuzzy match finder if name changed
             for f in os.listdir(self.download_path):
                 # Check if file part name matches or if it matches the safe target we requested
-                if fname in f: 
+                if fname in f or (task_id and task_id in f): 
                     return os.path.join(self.download_path, f)
                     
             return final_path # Hope
@@ -138,7 +214,7 @@ class Downloader:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
 
-    async def download_with_aria2(self, raw_link):
+    async def download_with_aria2(self, raw_link, task_id):
         if not self.aria2: await self.initialize()
         logger.info("🧲 Sending Magnet to Aria2 Daemon...")
 
@@ -149,7 +225,8 @@ class Downloader:
                 'seed-time': '0' # Stops seeding immediately after download finishes
             }
              # 1. Add Magnet
-            gid = self.aria2.add_uris([raw_link], options=options).gid
+            gid = self.aria2.add_uris([raw_link], options={'dir': self.download_path}).gid
+            logger.info(f"🧲 Aria2: Started {task_id} (GID: {gid})")
 
             # Use raw GID to fetch fresh objects each time
             download = self.aria2.get_download(gid)
@@ -201,9 +278,15 @@ class Downloader:
                     # \r = return to start of line, end='' = don't add new line
                     msg = f"\r🧲 [{bar}] {pct}% | ⚡ {download.download_speed_string()} | 📦 {download.total_length_string()}"
                     print(msg, end='', flush=True)
+
+                # --- KILL SWITCH (MID-MAGNET) ---
+                if task_id and self.redis:
+                    if await self.redis.get(f"kill_signal:{task_id}"):
+                        self.aria2.remove([gid], force=True, clean=True)
+                        raise Exception("ABORTED_BY_SIGNAL")
                 
-                # Faster refresh rate for smooth UI (1s instead of 2s)
-                await asyncio.sleep(1)
+                # Faster refresh rate for smooth UI
+                await asyncio.sleep(2)
 
             # 3. Resolve File Path
             # Refetch one last time to get the final list on disk

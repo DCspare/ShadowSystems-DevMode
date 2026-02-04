@@ -10,17 +10,26 @@ import asyncio
 sys.path.append("/app/shared")
 from pyrogram import Client, enums
 from shared.settings import settings
+from shared.database import db_service
 from pyrogram.file_id import FileId
 from handlers.processor import processor
 from shared.formatter import formatter 
+from shared.utils import ProgressManager 
+from shared.progress import TaskProgress
+from pyrogram import StopTransmission
+from shared.registry import task_dict, task_dict_lock, MirrorStatus
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
 logger = logging.getLogger("Leecher")
 
 class MediaLeecher:
-    def __init__(self, client, db):
+    def __init__(self, client, db, redis=None):
         self.client = client
         self.db = db
+        # Use passed redis, fallback to shared service singleton
+        self.redis = redis or db_service.redis
+        self.last_edit_time = 0 # <--- Track time for throttling
+        self.is_cancelled = False
 
         # ✨ CLEAN CONFIG USAGE
         self.gen_samples = settings.GENERATE_SAMPLES
@@ -201,17 +210,73 @@ class MediaLeecher:
     async def upload_progress(self, current, total):
         if total > 0:
             pct = int(current * 100 / total)
-            # Safe checking for _last_log attribute
-            if pct % 20 == 0 and pct != getattr(self, '_last_log', -1):
-                logger.info(f"📤 Upload: {pct}%")
-                self._last_log = pct
 
-    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto"):
+            # Calculate dynamic stats
+            speed_raw = self.upload_tracker.update(current)
+            eta_raw = self.upload_tracker.get_eta(current)
+            
+            speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
+            eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "Calculating"
+
+            # 1. Always update Redis (for the /status command)
+            if hasattr(self, 'current_task_id') and self.current_task_id:
+
+                # 2. Update SHARED REGISTRY (For StatusManager UI)
+                async with task_dict_lock:
+                    if self.current_task_id in task_dict:
+                        task_dict[self.current_task_id].update({
+                            "progress": pct,
+                            "processed": ProgressManager.get_readable_file_size(current),
+                            "size": ProgressManager.get_readable_file_size(total),
+                            "speed": speed_fmt, 
+                            "eta": eta_fmt,
+                            "status": MirrorStatus.STATUS_UPLOAD
+                        })
+
+                # 3. Docker-Safe Terminal Logging (Pure Flush)
+                # Only print every 10% to prevent buffer flooding
+                if pct % 10 == 0 and pct != getattr(self, '_last_terminal_pct', -1):
+                    self._last_terminal_pct = pct
+                    bar = ProgressManager.get_bar(pct)
+                    sys.stdout.write(f"📤 [UP] {pct}% {bar} | ID: {self.current_task_id}\n")
+                    sys.stdout.flush()
+                    
+                # 4. MID-UPLOAD KILL SWITCH (Pyrogram Native) ---
+                kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
+                if kill_check:
+                    logger.warning(f"🛑 Kill signal received during upload for {self.current_task_id}!")
+                    # This is the official way to stop Pyrogram without socket errors
+                    raise StopTransmission("ABORTED_BY_SIGNAL")
+
+    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None, user_id: str = "0", origin_chat_id: int = None, trigger_msg_id: str = None, user_tag: str = "User"): 
         # SAFETY INIT: Variables must exist before TRY block
+        self.current_task_id = task_id
+        self.current_user_id = user_id
+        self.current_user_tag = user_tag # Store for notifications
+        self.trigger_msg_id = trigger_msg_id
+        # Use origin if provided, fallback to default log channel
+        self.notify_chat = origin_chat_id or self.log_channel
+        self.is_cancelled = False # Reset state
+
         current_file_path = file_path
         cleanup_targets = [file_path]
+
+        # Initialize Tracker
+        file_size = os.path.getsize(file_path)
+        self.upload_tracker = TaskProgress(file_size)
         
         try:
+            # 1. Kill Switch Check (Before Starting)
+            if task_id and self.redis:
+            # Check if user cancelled while we were downloading
+                is_killed = await self.redis.get(f"kill_signal:{task_id}")
+                if is_killed:
+                    logger.info(f"🛑 Kill signal detected for {task_id}. Aborting.")
+                    raise Exception("TASK_CANCELLED_BY_USER")
+            
+                # Update status to 'uploading'
+                await self.redis.hset(f"task_status:{task_id}", "status", "uploading")
+
             file_name = os.path.basename(current_file_path)
 
             # 1. Fetch DB Meta (For the beautiful caption with Smart Fallback)
@@ -264,25 +329,53 @@ class MediaLeecher:
                      }
 
             # --- BRANDED RENAMING LOGIC ---
-            ext = os.path.splitext(file_name)[1]
             # Construct: Title.S01E01.720p.[ShadowSystem].mp4
-            # We sanitize spaces to dots for clean file names
-            safe_title = ptn.get('title', 'Video').replace(' ', '.')
+            ext = os.path.splitext(file_name)[1]
+
+            # 1. Determine the best Title
+            # Priority: 1. TMDB Title (Monster) | 2. PTN Guess | 3. Fallback "Video"
+            db_title = db_item.get('title')
+            ptn_title = ptn.get('title')
+            
+            # Logic: If current filename is a "safe/truncated" name, ignore PTN and use DB
+            if "truncated" in file_name.lower() or "direct" in file_name.lower() or not ptn_title:
+                best_title = db_title or "Video"
+            else:
+                best_title = ptn_title
+                
+            # 2. Sanitize for Filesystem (Dots instead of spaces)
+            safe_title = best_title.replace(' ', '.')
+
+            # 3. Quality Tag
             quality_tag = ptn.get('quality', 'HD')
             
+            # 4. Episode String (S01E01)
             s_tag = ""
             if ptn.get('season') and ptn.get('episode'):
                 s_tag = f".S{ptn.get('season'):02d}-E{ptn.get('episode'):02d}"
                 
+            # 5. Construct Final Branded Name
+            # Format: Title.S01E01.720p.[ShadowSystem].mp4
             branded_name = f"{safe_title}{s_tag}.{quality_tag}.{self.branding}{ext}"
+
+            # Remove any double dots that might have occurred
+            branded_name = branded_name.replace("..", ".")
             
-            # Perform Rename
+            # 6. Perform Rename
             new_path = os.path.join(os.path.dirname(file_path), branded_name)
-            os.rename(file_path, new_path)
-            file_path = new_path
-            file_name = branded_name
+            try:
+                os.rename(file_path, new_path)
+
+                # Add the NEW path to cleanup targets so it gets deleted on cancel/finish
+                cleanup_targets.append(new_path)
+
+                file_path = new_path
+                current_file_path = new_path # Update the safety variable
+                file_name = branded_name
             
-            logger.info(f"🏷️ Branded as: {file_name}")
+                logger.info(f"🏷️ Branded via DB/TMDB as: {file_name}")
+            except Exception as e:
+                logger.error(f"Rename failed: {e}. Continuing with original.")
             
             # 3. Prepare Visuals
             clean_caption = formatter.build_caption(
@@ -310,6 +403,7 @@ class MediaLeecher:
             # 5. Main Upload (With Fancy Caption)
             logger.info("🚀 Uploading Main Video...")
             self._last_log = -1
+            self._last_terminal_pct = -1 # Reset for terminal
             
             video_msg = await self.client.send_document(
                 chat_id=self.log_channel,
@@ -319,6 +413,11 @@ class MediaLeecher:
                 force_document=True,
                 progress=self.upload_progress
             )
+
+            # If task was cancelled, video_msg is None.
+            if video_msg is None:
+                logger.info(f"⚠️ Upload aborted for task {task_id}. Skipping indexing.")
+                return False 
 
             # Store the Video Message ID securely
             main_msg_id = video_msg.id
@@ -484,10 +583,76 @@ class MediaLeecher:
                 await self.db.library.insert_one(new_doc)
             
             logger.info(f"✅ Index Complete | Series: {bool(e_num)} (S{s_num}E{e_num})")
+
+            # Final Redis Update
+            if task_id and self.redis:
+                await self.redis.hset(f"task_status:{task_id}", mapping={
+                    "status": "completed",
+                    "progress": 100
+                })
+                await self.redis.expire(f"task_status:{task_id}", 600) # Keep for 10mins
+
             return True
 
-        except Exception as e:
+        except (StopTransmission, Exception) as e:
+            err_str = str(e)
+
+            # 1. Handle Clean Aborts (User Cancelled)
+            if isinstance(e, StopTransmission) or "ABORTED_BY_SIGNAL" in err_str or "TASK_CANCELLED" in err_str:
+                logger.warning(f"🛑 Task {task_id} gracefully stopped.")
+                if task_id and self.redis:
+                    await self.redis.hset(f"task_status:{task_id}", "status", "cancelled")
+
+                # 📢 NOTIFY USER VIA THE ORIGIN CHAT
+                target_chat = getattr(self, 'notify_chat', self.log_channel)
+                try:
+                    await self.client.send_message(
+                        chat_id=target_chat, # <--- REDIRECTED
+                        text=(
+                            f"🛑 **Task Aborted**\n"
+                            f"🆔 ID: `{task_id}`\n"
+                            f"🗑️ Status: Content scrubbed and slot released."
+                        )
+                    )
+                except Exception as notify_err:
+                    logger.error(f"Failed to send cancellation msg: {notify_err}")
+
+            # 2. Catch & Silence the Pyrogram 'NoneType' write noise
+            elif "'NoneType' object has no attribute 'write'" in err_str:
+                logger.debug("Silenced Pyrogram session cleanup noise.")
+            
+            # 3. Handle Real Errors (Crashes/Network)
+            else:
+                logger.error(f"Critical Leech Fail: {e}")
+                target_chat = getattr(self, 'notify_chat', self.log_channel)
+                try:
+                    await self.client.send_message(
+                        chat_id=target_chat,
+                        text=f"❌ **Task Failed**\n🆔 ID: `{task_id or 'unknown'}`\nError: `{err_str[:50]}`"
+                    )
+                except: pass
+                
+            return False
             logger.error(f"Critical Leech Fail: {e}")
+
+        except Exception as e:
+            # Catch the specific stop_transmission error string
+            if "unbound method stop_transmission" in str(e).lower() or "task_cancelled" in str(e).lower():
+                logger.info(f"🛑 Upload {task_id} stopped via native signal.")
+                # Update Redis
+                if task_id and self.redis:
+                    await self.redis.hset(f"task_status:{task_id}", "status", "cancelled")
+                
+                # Send the "Aborted" message to origin (DM or Log)
+                try:
+                    await self.client.send_message(
+                        chat_id=self.notify_chat,
+                        text=f"🛑 **Task Aborted**\n🆔 ID: `{task_id}`"
+                    )
+                except: pass
+            else:
+                # Real error handling...
+                pass
             return False
         
         finally:
@@ -495,6 +660,47 @@ class MediaLeecher:
             # Force close potential pyrogram file handlers by waiting a moment
             await asyncio.sleep(2.0)
 
+            # 1. DELETE THE TRIGGER COMMAND (The /leech message)
+            if self.trigger_msg_id and self.notify_chat:
+                try:
+                    await self.client.delete_messages(
+                        chat_id=(self.notify_chat), 
+                        message_ids=int(self.trigger_msg_id)
+                    )
+                except: pass
+
+            # 2. SEND COMPLETION NOTIFICATION (Only if successful)
+            # Note: 'msg_link' and 'db_item' are available from the try block scope if success
+            if not self.is_cancelled and task_id:
+                try:
+                    # We fetch variables from local scope (safe if successful)
+                    title = locals().get('db_item', {}).get('title', 'Video')
+                    link = locals().get('msg_link', '#')
+            
+                    await self.client.send_message(
+                    chat_id=int(self.notify_chat),
+                    text=(
+                        f"✅ **Task Complete**\n"
+                        f"📦 `{title}`\n"
+                        f"👤 {self.current_user_tag}\n"
+                        f"📎 [View in Log]({link})"
+                    ),
+                    disable_web_page_preview=True
+                )
+                except: pass
+
+            # 3. MASTER REGISTRY PURGE
+            if task_id:
+                async with task_dict_lock:
+                    task_dict.pop(task_id, None)
+
+            # 4. RELEASE USER SLOT
+            if task_id and user_id != "0" and self.redis:
+                limit_key = f"active_user_tasks:{user_id}"
+                await self.redis.srem(limit_key, task_id)
+                logger.info(f"🔓 Slot released for User {user_id}")
+
+            # 5. Cleanup temporary files
             # Master List: Init path + Current path + Screenshots
             targets = set(cleanup_targets)
             if 'current_file_path' in locals():

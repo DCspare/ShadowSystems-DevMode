@@ -10,13 +10,13 @@ from pyrogram.file_id import FileId # Used to decode the string identity
 from shared.schemas import SignRequest
 from shared.settings import settings
 from shared.database import db_service
-from core.utils import generate_short_id
+from shared.utils import generate_short_id
 from core.security import sign_stream_link 
-from fastapi.responses import JSONResponse, StreamingResponse
 from services.bot_manager import bot_manager
 from services.metadata import metadata_service
 from fastapi import APIRouter, HTTPException , Request
 from core.security import sign_stream_link, RateLimiter
+from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger("Library")
 # Router handles the /library prefix internally
