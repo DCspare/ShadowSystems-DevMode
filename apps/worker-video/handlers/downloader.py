@@ -7,6 +7,8 @@ import yt_dlp
 import asyncio
 import logging
 from shared.utils import ProgressManager
+from shared.progress import TaskProgress
+from shared.registry import task_dict, task_dict_lock, MirrorStatus 
 
 logger = logging.getLogger("Downloader")
 
@@ -29,32 +31,62 @@ class Downloader:
         except Exception:
             self.aria2 = None
 
+    async def _update_status(self, pct, downloaded, total, speed, eta):
+        """Helper to safely write to the global task dictionary."""
+        async with task_dict_lock:
+            if self.current_task_id in task_dict:
+                task_dict[self.current_task_id].update({
+                    "progress": pct,
+                    "processed": ProgressManager.get_readable_file_size(downloaded),
+                    "size": ProgressManager.get_readable_file_size(total),
+                    "speed": speed,
+                    "eta": eta,
+                    "status": MirrorStatus.STATUS_DOWNLOAD
+                })
+
     def _native_logger_progress(self, d):
-        """Pure Synchronous Flush for Docker Terminal"""
+        """Reports data to the Shared Registry for StatusManager to display."""
         if d['status'] == 'downloading':
             try:
                 # Capture current state into class attributes
                 # This allows worker.py to read progress without freezing yt-dlp
                 downloaded = d.get('downloaded_bytes', 0)
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                if total <= 0: return
                 
-                if total > 0:
-                    self.current_pct = int(downloaded * 100 / total)
-                    self.current_speed = d.get('_speed_str', 'N/A')
-                    self.current_eta = d.get('_eta_str', 'N/A')
+                if not self.tracker:
+                    from shared.progress import TaskProgress
+                    self.tracker = TaskProgress(total)
+
+                    # ✅ SYNC-SAFE REGISTRY UPDATE
+                    # We update the dictionary so the StatusManager Heartbeat can see it
+                    task_id = self.current_task_id
                     
-                    # LOGGING: We only print to terminal every 10% to prevent buffer flooding
-                    if self.current_pct % 10 == 0 and self.current_pct != getattr(self, '_last_print_pct', -1):
-                        self._last_print_pct = self.current_pct
-                        bar = ProgressManager.get_bar(self.current_pct)
+                speed_raw = self.tracker.update(downloaded)
+                eta_raw = self.tracker.get_eta(downloaded)
+                pct = int(downloaded * 100 / total)
+                    
+                speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
+                eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
                         
-                        # Use newline (\n) instead of (\r) because Docker logs handle lines better
-                        sys.stdout.write(
-                            f"⬇️ [DL] {self.current_pct}% {bar} | "
-                            f"Speed: {self.current_speed} | ETA: {self.current_eta} | "
-                            f"ID: {self.current_task_id}\n"
-                        )
-                        sys.stdout.flush()
+                # ✅ USE THREAD-SAFE DICTIONARY UPDATE
+                # Instead of run_coroutine_threadsafe, we update the dict directly
+                # Python dict updates are thread-safe in CPython for this use case
+                if self.current_task_id in task_dict:
+                    task_dict[self.current_task_id].update({
+                        "progress": pct,
+                        "processed": ProgressManager.get_readable_file_size(downloaded),
+                        "size": ProgressManager.get_readable_file_size(total),
+                        "speed": speed_fmt,
+                        "eta": eta_fmt,
+                        "status": MirrorStatus.STATUS_DOWNLOAD
+                    })
+
+                # Terminal (Every 10%)
+                if pct % 10 == 0 and pct != getattr(self, '_last_print_pct', -1):
+                    self._last_print_pct = pct
+                    sys.stdout.write(f"⬇️ [DL] {pct}% | {speed_fmt} | ETA: {eta_fmt}\n")
+                    sys.stdout.flush()
                         
                 # Check Kill Signal
                 if self.redis:
@@ -118,9 +150,17 @@ class Downloader:
         self.current_task_id = task_id
         self.current_pct = 0 # Initialize for worker to read
         self._last_pct = -1 # Reset for new file
+        self.tracker = None # We assume size is 0 and update it once yt-dlp starts
         raw_link = target['url']
         fname = self._get_safe_filename(target.get('filename'), "video.mp4")
         final_path = os.path.join(self.download_path, fname)
+
+        async with task_dict_lock:
+            if task_id in task_dict:
+                task_dict[task_id].update({
+                    "status": MirrorStatus.STATUS_DOWNLOAD,
+                    "eta": "Probing..."
+                })
 
         # 1. Kill Switch Check (Initial)
         if task_id and self.redis:

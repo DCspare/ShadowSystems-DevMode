@@ -59,6 +59,7 @@ async def leech_command(client, message):
         if db_service.redis:
             user_id = message.from_user.id
             origin_chat_id = message.chat.id # <--- TRACK ORIGIN
+            trigger_msg_id = message.id # <--- Store this to delete later
             limit_key = f"active_user_tasks:{user_id}"
             
             # 1. Check Limits (Bypass if user is Owner OR Toggle is OFF)
@@ -73,6 +74,9 @@ async def leech_command(client, message):
                         f"You have `{active_count}` active tasks: {ids_str}\n\n"
                         f"Please wait for them to finish or `/cancel` one to start a new task."
                     )
+
+            # Prepare User Tag (Username or First Name)
+            user_tag = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
 
             # 2. Setup Task Identity
             task_id = str(uuid.uuid4())[:8] # Short unique ID 
@@ -99,15 +103,20 @@ async def leech_command(client, message):
                 f"📜 Channel: [Open Log]({chan_link})"
             )
 
-            # 5. SEND THE REPLY FIRST (To get the msg_id)
-            sent_msg = await message.reply_text(
-                response_text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📊 View Queue Status", callback_data="check_status")]
-                ]),
-                disable_web_page_preview=True,
-                quote=True
-            )
+            # 5. Send to DM if in group, else reply in DM
+            try:
+                if message.chat.type != enums.ChatType.PRIVATE:
+                    # Send info to Owner DM
+                    sent_msg = await client.send_message(
+                        chat_id=OWNER_ID, 
+                        text=response_text + f"\n\n📍 *Triggered in: {message.chat.title}*",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📊 Status", callback_data="check_status")]])
+                    )
+                else:
+                    sent_msg = await message.reply_text(response_text, quote=True)
+            except Exception:
+                # Fallback if user hasn't started bot in DM
+                sent_msg = await message.reply_text(response_text, quote=True)
 
             # 6. CREATE THE REDIS STATUS ENTRY (a "Live Status" in Redis)
             await db_service.redis.hset(status_key, mapping={
@@ -115,15 +124,17 @@ async def leech_command(client, message):
                 "status": "queued",
                 "progress": 0,
                 "tmdb_id": tmdb_id,
+                "user_tag": user_tag,
                 "chat_id": str(message.chat.id),
-                "msg_id": str(sent_msg.id)
+                "msg_id": str(sent_msg.id),
+                "trigger_msg_id": str(trigger_msg_id)
             })
             # Expire status after 1 hour to keep Redis clean
             await db_service.redis.expire(status_key, 3600)
 
             # 7. PAYLOAD & PUSH TO QUEUE
-            # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id
-            payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}"
+            # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id|user_tag|trigger_msg_id
+            payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}|{user_tag}|{trigger_msg_id}"
             
 
             # 5. Push to Queue

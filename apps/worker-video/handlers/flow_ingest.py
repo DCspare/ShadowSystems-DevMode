@@ -15,7 +15,9 @@ from pyrogram.file_id import FileId
 from handlers.processor import processor
 from shared.formatter import formatter 
 from shared.utils import ProgressManager 
+from shared.progress import TaskProgress
 from pyrogram import StopTransmission
+from shared.registry import task_dict, task_dict_lock, MirrorStatus
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
 
 logger = logging.getLogger("Leecher")
@@ -27,6 +29,7 @@ class MediaLeecher:
         # Use passed redis, fallback to shared service singleton
         self.redis = redis or db_service.redis
         self.last_edit_time = 0 # <--- Track time for throttling
+        self.is_cancelled = False
 
         # ✨ CLEAN CONFIG USAGE
         self.gen_samples = settings.GENERATE_SAMPLES
@@ -204,56 +207,39 @@ class MediaLeecher:
         
         return None
 
-# --- 1. UNIVERSAL UI METHOD ---
-    async def update_tg_ui(self, task_id, pct, status_text="Processing"):
-        """Throttled Telegram Message Editor shared by Download & Upload"""
-        now = time.time()
-        # Throttled to 6 seconds to avoid Telegram Flood Bans
-        if now - getattr(self, 'last_edit_time', 0) > 6:
-            try:
-                status_key = f"task_status:{task_id}"
-                data = await self.redis.hgetall(status_key)
-                chat_id = data.get("chat_id")
-                msg_id = data.get("msg_id")
-
-                if chat_id and msg_id:
-                    filled = min(max(int(pct) // 10, 0), 10)
-                    bar = f"[{'■' * filled}{'□' * (10 - filled)}]"
-                    
-                    await self.client.edit_message_text(
-                        chat_id=int(chat_id),
-                        message_id=int(msg_id),
-                        text=f"⚡ **{status_text}...**\n`{bar}` {pct}%\n🆔 ID: `{task_id}`"
-                    )
-                    self.last_edit_time = now
-            except Exception:
-                pass # Ignore "Message Not Modified" or Telegram transient errors
-
     async def upload_progress(self, current, total):
         if total > 0:
             pct = int(current * 100 / total)
 
+            # Calculate dynamic stats
+            speed_raw = self.upload_tracker.update(current)
+            eta_raw = self.upload_tracker.get_eta(current)
+            
+            speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
+            eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "Calculating"
+
             # 1. Always update Redis (for the /status command)
             if hasattr(self, 'current_task_id') and self.current_task_id:
-                # Update Redis for /status
-                await self.redis.hset(f"task_status:{self.current_task_id}", "progress", pct)
 
-                # Update Telegram UI
-                await self.update_tg_ui(self.current_task_id, pct, "Uploading")
+                # 2. Update SHARED REGISTRY (For StatusManager UI)
+                async with task_dict_lock:
+                    if self.current_task_id in task_dict:
+                        task_dict[self.current_task_id].update({
+                            "progress": pct,
+                            "processed": ProgressManager.get_readable_file_size(current),
+                            "size": ProgressManager.get_readable_file_size(total),
+                            "speed": speed_fmt, 
+                            "eta": eta_fmt,
+                            "status": MirrorStatus.STATUS_UPLOAD
+                        })
 
-                # 2. ✅ NEW: Docker-Safe Terminal Logging (Pure Flush)
+                # 3. Docker-Safe Terminal Logging (Pure Flush)
                 # Only print every 10% to prevent buffer flooding
                 if pct % 10 == 0 and pct != getattr(self, '_last_terminal_pct', -1):
                     self._last_terminal_pct = pct
                     bar = ProgressManager.get_bar(pct)
                     sys.stdout.write(f"📤 [UP] {pct}% {bar} | ID: {self.current_task_id}\n")
                     sys.stdout.flush()
-
-                # 3. Throttled Telegram UI Update (Keep the 6s timer here)
-                now = time.time()
-                if now - getattr(self, 'last_edit_time', 0) > 6:
-                    await self.update_tg_ui(self.current_task_id, pct, "Uploading")
-                    self.last_edit_time = now
                     
                 # 4. MID-UPLOAD KILL SWITCH (Pyrogram Native) ---
                 kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
@@ -262,15 +248,22 @@ class MediaLeecher:
                     # This is the official way to stop Pyrogram without socket errors
                     raise StopTransmission("ABORTED_BY_SIGNAL")
 
-    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None, user_id: str = "0", origin_chat_id: int = None):
+    async def upload_and_sync(self, file_path: str, tmdb_id: int, type_hint: str = "auto", task_id: str = None, user_id: str = "0", origin_chat_id: int = None, trigger_msg_id: str = None, user_tag: str = "User"): 
         # SAFETY INIT: Variables must exist before TRY block
         self.current_task_id = task_id
         self.current_user_id = user_id
+        self.current_user_tag = user_tag # Store for notifications
+        self.trigger_msg_id = trigger_msg_id
         # Use origin if provided, fallback to default log channel
         self.notify_chat = origin_chat_id or self.log_channel
+        self.is_cancelled = False # Reset state
 
         current_file_path = file_path
         cleanup_targets = [file_path]
+
+        # Initialize Tracker
+        file_size = os.path.getsize(file_path)
+        self.upload_tracker = TaskProgress(file_size)
         
         try:
             # 1. Kill Switch Check (Before Starting)
@@ -641,18 +634,73 @@ class MediaLeecher:
                 
             return False
             logger.error(f"Critical Leech Fail: {e}")
+
+        except Exception as e:
+            # Catch the specific stop_transmission error string
+            if "unbound method stop_transmission" in str(e).lower() or "task_cancelled" in str(e).lower():
+                logger.info(f"🛑 Upload {task_id} stopped via native signal.")
+                # Update Redis
+                if task_id and self.redis:
+                    await self.redis.hset(f"task_status:{task_id}", "status", "cancelled")
+                
+                # Send the "Aborted" message to origin (DM or Log)
+                try:
+                    await self.client.send_message(
+                        chat_id=self.notify_chat,
+                        text=f"🛑 **Task Aborted**\n🆔 ID: `{task_id}`"
+                    )
+                except: pass
+            else:
+                # Real error handling...
+                pass
+            return False
         
         finally:
             # 9. Robust Cleanup
             # Force close potential pyrogram file handlers by waiting a moment
             await asyncio.sleep(2.0)
 
-            # --- RELEASE USER SLOT ---
+            # 1. DELETE THE TRIGGER COMMAND (The /leech message)
+            if self.trigger_msg_id and self.notify_chat:
+                try:
+                    await self.client.delete_messages(
+                        chat_id=(self.notify_chat), 
+                        message_ids=int(self.trigger_msg_id)
+                    )
+                except: pass
+
+            # 2. SEND COMPLETION NOTIFICATION (Only if successful)
+            # Note: 'msg_link' and 'db_item' are available from the try block scope if success
+            if not self.is_cancelled and task_id:
+                try:
+                    # We fetch variables from local scope (safe if successful)
+                    title = locals().get('db_item', {}).get('title', 'Video')
+                    link = locals().get('msg_link', '#')
+            
+                    await self.client.send_message(
+                    chat_id=int(self.notify_chat),
+                    text=(
+                        f"✅ **Task Complete**\n"
+                        f"📦 `{title}`\n"
+                        f"👤 {self.current_user_tag}\n"
+                        f"📎 [View in Log]({link})"
+                    ),
+                    disable_web_page_preview=True
+                )
+                except: pass
+
+            # 3. MASTER REGISTRY PURGE
+            if task_id:
+                async with task_dict_lock:
+                    task_dict.pop(task_id, None)
+
+            # 4. RELEASE USER SLOT
             if task_id and user_id != "0" and self.redis:
                 limit_key = f"active_user_tasks:{user_id}"
                 await self.redis.srem(limit_key, task_id)
-                logger.info(f"🔓 Slot released for User {user_id} (Task {task_id})")
+                logger.info(f"🔓 Slot released for User {user_id}")
 
+            # 5. Cleanup temporary files
             # Master List: Init path + Current path + Screenshots
             targets = set(cleanup_targets)
             if 'current_file_path' in locals():
