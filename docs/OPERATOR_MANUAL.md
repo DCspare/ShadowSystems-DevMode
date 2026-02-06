@@ -228,7 +228,9 @@ curl -X POST http://localhost:8080/api/library/index/movie/99999
 
 ```bash
 # 1. Install dependencies locally (if Python is installed on host)
-pip install pyrogram tgcrypto
+pip install pyrogram tgcrypto 
+OR 
+source .venv/bin/activate # if .venv is available
 
 # 2. Create the generator script (if missing)
 cat <<EOF > gen_session.py
@@ -272,7 +274,7 @@ Now manually hit the **Sign** endpoint using the data you just copied.
 **Command:**
 *(Replace `YOUR_SHORT_ID` and `YOUR_FILE_ID/telegram_id` with the real text you copied above)*
 
-```bash
+```bash # DEV Mode
 curl -X POST http://localhost:8080/api/library/sign \
   -H "Content-Type: application/json" \
   -d '{

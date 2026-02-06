@@ -69,6 +69,7 @@ func InitTelegram(ctx context.Context, logger *zap.Logger) (*TelegramClient, err
 		)
 
 		if err != nil {
+			logger.Fatal("Failed to create client", zap.Error(err))
 			return
 		}
 		
@@ -99,6 +100,7 @@ func (tc *TelegramClient) Run(ctx context.Context, onStart func(context.Context)
 		cleanIDStr := strings.TrimPrefix(targetIDStr, "-100")
 		targetID, _ := strconv.ParseInt(cleanIDStr, 10, 64)
 
+		// Try to find the channel access hash
 		dlgRes, err := tc.API.MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
 			Limit:      100,
 			OffsetPeer: &tg.InputPeerEmpty{},
