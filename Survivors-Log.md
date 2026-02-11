@@ -264,3 +264,13 @@ Upon reviewing our detailed interaction logs from the start, there are **three s
 - **The Error:** Status message remains in chat after all tasks are finished.
 - **Description:** The loop lacked logic to detect an empty registry and perform self-destruction of the status entity.
 - **The Fix:** Implemented a "Master Purge" in the worker's `finally` block and a "Lifecycle Watcher" in the `StatusManager`. The manager now detects `count == 0`, deletes the active status message, and enters a dormant state until a new task is registered.
+
+#### 🧱 Hurdle #46: The MTProto "Cold-Start" Blindness
+- **The Error:** `PeerIdInvalid` or `Handshake Fail` until a manual message was sent.
+- **Description:** Telegram MTProto clients require an `access_hash` to interact with private peers. This hash was stored in a temporary SQLite Journal (`-wal` or `-journal` files) but was lost during Docker restarts because:
+  1. The bot was force-killed (`SIGKILL`) before it could "merge" the journal into the main `.session` file.
+  2. A manual script was deleting journal files on startup, essentially wiping the bot's memory of its handshake.
+- **The Fix:** 
+  1. Implemented **Graceful Signal Handling**: The bots now listen for `SIGTERM` from Docker and call `app.stop()` explicitly, ensuring SQLite merges all pending handshake data.
+  2. Created a **Deep-Probe Handshake Protocol**: Bots now use `MessagesGetDialogs` and `get_chat` on boot to rebuild the cache internally without requiring manual human interaction.
+  3. Integrated a **Shared Peer Seeder Listener**: Every bot now listens for pulse messages to dynamically update their caches in the background.

@@ -339,8 +339,8 @@ curl -X POST http://localhost:8080/api/library/sign \
   -H "Content-Type: application/json" \
   -H "X-Shadow-Secret: shadow_super_secret_dev_key" \
   -d '{
-    "short_id": "8fb8c22", 
-    "file_id": "BQACAgUAAyEGAATEUt8iAAICUWl4fqISaCqr8pOBGwuM_aXDeh6YAAIYIAACbFDBVx5Bhi6nqsCcHgQ" 
+    "short_id": "7e2e66a", 
+    "file_id": "BQACAgUAAyEGAATEUt8iAAIDIGmDNUJDfclwLMF9RhPzcn5SqeIrAAIlHgACHv4ZVNcpxBopBKULHgQ" 
   }'
 ```
 #### ✅ Expected Output
@@ -446,3 +446,13 @@ curl -i "http://localhost:8080/api/library/subtitle/BQACAgUAAyEGAATEUt8iAAICdWl4
 #### ✅ Expected Output
 You should see a response like this file:
 [Subtitle Output](../sub.txt)
+
+
+#### To make life easier and get rid of typing long command like `docker compose -f docker-compose.dev.yml` use below command in your local terminal(not in docker container):
+
+`alias dcd='docker compose -f docker-compose.dev.yml'`
+
+Now, you can just type:
+dcd up -d
+dcd logs -f manager
+dcd build

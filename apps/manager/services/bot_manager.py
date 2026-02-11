@@ -1,54 +1,37 @@
 # apps/manager/services/bot_manager.py 
-import os
+import os 
 import logging
-from pyrogram import Client
-from shared.settings import settings
+from shared.tg_client import TgClient
 
 logger = logging.getLogger("BotManager")
 
-class ShadowBot:
+class ShadowManager:
     """
     Manager Bot Service (The Brain)
     Handles metadata ingestion and admin commands.
-    """
-    def __init__(self):
-        self.app = None
-
+    """  
     async def start(self):
         """Initializes and starts the Pyrogram Client"""
         logger.info("Starting Manager Bot...")
         
-        session_dir = "/app/sessions"
-        if not os.path.exists(session_dir):
-            os.makedirs(session_dir, exist_ok=True)
+        # We start Bot vs User 
+        await TgClient.start_bot(name="manager_bot")
+        await TgClient.start_user()
 
-        # Smart Plugin Loader
-        # Tells Pyrogram to look in "handlers" folder for decorators
-        plugins_config = dict(
-            root="handlers" 
-        )
+        self.app = TgClient.bot or TgClient.user # Link for handler compatibility
 
-        self.app = Client(
-            name="manager_admin",
-            api_id=settings.TG_API_ID,
-            api_hash=settings.TG_API_HASH,
-            bot_token=settings.TG_BOT_TOKEN,
-            workdir=session_dir,
-            plugins=plugins_config # <--- Auto-loads leech.py
-        )
-        
-        await self.app.start()
-        me = await self.app.get_me()
-        logger.info(f"✅ Manager Brain Online: @{me.username}")
+        # 🛰️ Enable Verification Pulse for Manager
+        await TgClient.send_startup_pulse("MANAGER-BRAIN")
+        logger.info(f"✅ Manager Brain Online: @{self.app.me.username}")
+
+    @property
+    def client(self):
+        return TgClient.bot
 
     async def stop(self):
         """Safe shutdown"""
-        if self.app:
-            try:
-                await self.app.stop()
-            except:
-                pass
-            logger.info("Manager Bot disconnected.")
+        await TgClient.stop()
+        logger.info("Manager Bot disconnected.")
 
-# Critical instance name that main.py expects
-bot_manager = ShadowBot()
+# Alias for main.py compatibility
+bot_manager = ShadowManager()

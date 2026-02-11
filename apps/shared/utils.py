@@ -6,6 +6,7 @@ import psutil
 import logging
 from html import escape
 from typing import List
+from shared.settings import settings
 
 logger = logging.getLogger("KernelUtils")
 
@@ -61,53 +62,6 @@ class SystemMonitor:
             "mem": mem,
             "free": ProgressManager.get_readable_file_size(free)
         }
-
-async def resolve_peers(client, chat_ids: List):
-    """
-    Shadow Deep-Probe Handshake:
-    Forces Telegram to reveal the Access Hash by trying multiple MTProto paths.
-    """
-    logger.info("📡 Starting Deep-Probe Handshake...")
-    resolved = 0
-    
-    for cid in chat_ids:
-        if not cid or cid == 0: continue
-        success = False
-        
-        # Method 1: Send a silent chat action (Fastest)
-        try:
-            from pyrogram.enums import ChatAction
-            await client.send_chat_action(cid, ChatAction.TYPING)
-            success = True
-        except: pass
-
-        # Method 2: Attempt to fetch the last message (Most effective for caching)
-        if not success:
-            try:
-                async for _ in client.get_chat_history(cid, limit=1):
-                    break
-                success = True
-            except: pass
-
-        # Method 3: Last Ditch - Export Invite Link (Forces server lookup)
-        if not success:
-            try:
-                # This often bypasses PeerIdInvalid if bot is admin
-                await client.get_chat_member(cid, "me")
-                success = True
-            except: pass
-
-        if success:
-            try:
-                chat = await client.get_chat(cid)
-                logger.info(f"✅ Resolved: {chat.title} ({cid})")
-                resolved += 1
-            except: pass
-        else:
-            logger.error(f"❌ Deep-Probe Failed for {cid}. "
-                         f"Bot needs a message update to learn this hash.")
-
-    logger.info(f"🛰️ Handshake Phase Complete. Resolved {resolved} peers.")
 
 def is_authorized(user_id: int) -> bool:
     """Checks if a user is the owner or a sudo user."""

@@ -1,18 +1,19 @@
-# apps/manager/main.py 
+# apps/manager/main.py
 import sys
 import logging
-from routers import library, auth, admin
+import asyncio
 sys.path.append("/app/shared") # Docker fix for imports 
+from routers import library, auth, admin
 from fastapi import FastAPI, Request 
 from shared.settings import settings
+from shared.tg_client import TgClient
 from shared.database import db_service
 from fastapi.responses import JSONResponse
 from services.bot_manager import bot_manager
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Setup Logging
-logging.basicConfig(level=logging.INFO)
+TgClient.setup_logging() 
 logger = logging.getLogger("Manager")
 
 class GatekeeperMiddleware(BaseHTTPMiddleware):
@@ -95,12 +96,16 @@ async def startup_event():
     # Initialize Database
     try:
         await db_service.connect()
+        logger.info("Shadow Database connected.")
+
     except Exception as e:
         logger.error(f"DATABASE CRITICAL: {e}")
 
     # Initialize Manager Bot
     try:
-        await bot_manager.start()
+        await bot_manager.start() 
+        logger.info("Manager connected.")
+
     except Exception as e:
         logger.error(f"TELEGRAM CRITICAL: {e}")
 

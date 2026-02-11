@@ -3,24 +3,23 @@ import os
 import sys
 import time
 import asyncio
+import signal
 import logging
 import subprocess
 sys.path.append("/app/shared")
 from redis.asyncio import Redis
+from shared.tg_client import TgClient
+from shared.database import db_service
+from pyrogram.handlers import MessageHandler
 from shared.settings import settings
 from pyrogram import Client, filters
 from handlers.downloader import downloader
 from handlers.flow_ingest import MediaLeecher
 from motor.motor_asyncio import AsyncIOMotorClient
-from shared.utils import resolve_peers
 from shared.registry import task_dict, task_dict_lock, MirrorStatus
 from handlers.status_manager import StatusManager
 
-# Configure Logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+TgClient.setup_logging()
 logger = logging.getLogger("VideoWorker")
 
 class VideoWorker:
@@ -32,12 +31,18 @@ class VideoWorker:
         self.db = None
         self.redis = None
         self.leecher = None
-        self.resolved_peers = set()
-        # Identity via Env Var (e.g. video_1) or fallback
-        self.worker_id = os.getenv("WORKER_ID", "worker_1")
-        # Ensure log_channel is int
+        self.is_running = True
+        self.shutdown_event = asyncio.Event()
+
+        # 🔑 DYNAMIC SESSION NAME
+        # Defaults to 'worker_video_default' if SESSION_FILE is missing in .env
+        self.session_name = os.getenv("SESSION_FILE", "worker_video_default")
+        self.mode = os.getenv("WORKER_MODE", "BOT").upper()
+        
+        logger.info(f"🆔 Node Initialized | Mode: {self.mode} | Session: {self.session_name}")
+
         try:
-            self.log_channel = int(os.getenv("TG_LOG_CHANNEL_ID"))
+            self.log_channel = int(settings.TG_LOG_CHANNEL_ID)
         except:
             self.log_channel = 0
 
@@ -101,158 +106,103 @@ class VideoWorker:
         self.clean_slate()
         
         # 1. DB (Persistence Layer)
+        await db_service.connect() # Ensure kernel DB is connected for Shared Registry
         mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
         self.db = mongo_client["shadow_systems"]
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-        # 2. Telegram Identity
-        logger.info("Initializing Pyrogram Client...")
-        is_bot_mode = os.getenv("WORKER_MODE", "BOT") == "BOT"
-
-        session_name = os.getenv("SESSION_FILE", "worker_default")
-
-        client_args = {
-            "api_id": settings.TG_API_ID,
-            "api_hash": settings.TG_API_HASH,
-            "workdir": "/app/sessions",
-            "sleep_threshold": 60,               # MLTB Standard: Wait 60s max for flood
-            "max_concurrent_transmissions": 10,  # MLTB Standard: 10 parallel chunks
-        }
-        
-        if is_bot_mode:
-            logger.info(f"🤖 Bot Mode Active: {session_name}")
-            self.app = Client(
-                name="worker_bot",
-                bot_token=settings.TG_WORKER_BOT_TOKEN,
-                **client_args 
-            )
-        else:
-            logger.info(f"⚡ User Session Mode Active: {session_name}")
-            self.app = Client(
-                name=session_name,
-                session_string=settings.TG_SESSION_STRING, # Support for Session String
-                **client_args
-            )
-
-        # MLTB Performance Tuning: Cache increase
-        self.app.max_message_cache_size = 15000
-        
-        # 3. Initialize Leecher
-        self.leecher = MediaLeecher(self.app, self.db, self.redis)
-
-        # 4. Initialize Downloader with THE BRIDGE
+        # Initialize Downloader with THE BRIDGE
         self.start_aria2_daemon()
         await downloader.initialize(
             redis=self.redis
         )
 
-        # --- UX POLISH: Peer Discovery Listener ---
-        @self.app.on_message()
-        async def auto_resolve_handler(client, message):
-            target_ids = [settings.TG_LOG_CHANNEL_ID, settings.TG_BACKUP_CHANNEL_ID]
-            if message.chat.id in target_ids:
-                if message.chat.id not in self.resolved_peers:
-                    self.resolved_peers.add(message.chat.id)
-                    logger.info(f"🛰️ [Peer Discovery]: {message.chat.title} ({message.chat.id}) - Access Hash Cached.")
+        # 1. Start Primary Identity (1st Priority)
+        started = await TgClient.start_bot(
+            name=self.session_name, 
+            token_override=settings.TG_WORKER_BOT_TOKEN
+        )
 
-        # 5. Start App and resolve peer 
-        await self.app.start()
-        self.app.start_time = time.time() # For Uptime check
-        logger.info(f"Worker fully operational as @{(await self.app.get_me()).username}")
+        # 2. Try User (Fallback start_user)
+        await TgClient.start_user()     # For high-speed user transfers
 
-        # 6. ✅ Official Shadow-Handshake (No more /health)
-        await resolve_peers(self.app, [
-            settings.TG_LOG_CHANNEL_ID, 
-            settings.TG_BACKUP_CHANNEL_ID
-        ])
+        if not started and not TgClient.user:
+            logger.critical("❌ No valid identity found (Bot or User). Exiting.")
+            sys.exit(1)
 
-        # 7. Start Status Manager Heartbeat
+        await TgClient.start_helpers()  # Spin up the HELPER_TOKENS
+
+        # 3. Dynamic Handler Assignment
+        # If in BOT mode, we use the Bot. If USER mode, and it worked, use User.
+        self.app = await TgClient.get_client()
+        self.leecher = MediaLeecher(self.app, self.db, self.redis)
+
+        # 4. Handshake Pulse
+        await TgClient.send_startup_pulse(f"WORKER-{self.session_name.upper()}") # 🛰️ Visible Handshake check
+
+        # 5. Start Status Manager Heartbeat
         self.status_mgr = StatusManager(self.app)
         asyncio.create_task(self.status_mgr.update_heartbeat()) # Background Loop
-
-        # # ---------------------------------------------
-        # # 6. MANUAL HEALTH CHECK COMMAND
-        # # ---------------------------------------------
-        # @self.app.on_message(filters.command("health"))
-        # async def health_check(client, message):
-        #     """Manual trigger to verify bot is alive and caching works"""
-        #     # Collect Stats
-        #     uptime = "Online"
-        #     mode = "BOT MODE" if is_bot_mode else "USER MODE"
-            
-        #     chat_info = f"{message.chat.title} (`{message.chat.id}`)"
-
-        #     # Send simpler format to ensure rendering
-        #     await message.reply_text(
-        #       f"🤖 **Shadow Worker Status**\n\n"
-        #       f"🆔 **Worker:** `{self.worker_id}`\n"
-        #       f"🛡️ **Mode:** {mode}\n"
-        #       f"📡 **Connected Peer:** {chat_info}\n\n"
-        #       f"✅ **System Ready.**"
-        #      )
-        #      # FORCE CACHE UPDATE
-        #     # self.log_channel = message.chat.id
-        # #     logger.info(f"Health Check successful. Session validated: {message.chat.title}")
-
-        # # 7.. Safe Peer Resolution
-        # # We try to get_chat. If it fails, we rely on the manual /health command 
-        # # to "Wake up" the caching layer later.
-        # try:
-        #     logger.info(f"�� Probing Channel {self.log_channel}...")
-        #     chat = await self.app.get_chat(self.log_channel)
-        #     logger.info(f"✅ Connection Established: {chat.title}")
-            
-        #     # Send Startup Signal
-        #     await self.app.send_message(
-        #         self.log_channel, 
-        #         f"🔄 **Worker Restarted**\nready as: {self.worker_id}"
-        #     )
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Automatic Handshake failed: {e}")
-        #     logger.warning("👉 ACTION: Send '/health' in the Log Channel/Group to fix cache!")
-
+        
+    async def stop_services(self):
+        """🛑 GRACEFUL SHUTDOWN ROUTINE"""
+        logger.info("🛑 Shutdown Signal Received. Cleaning up...")
+        self.is_running = False
+        
+        # 1. Kill Aria2
+        if hasattr(self, 'aria2_proc'):
+            self.aria2_proc.terminate()
+        
+        # 2. Stop Pyrogram (CRITICAL: This saves the SQLite Session)
+        await TgClient.stop()
+        logger.info("✅ Pyrogram Session Saved & Closed.")
 
     async def task_watcher(self):
         """Watch Redis"""
         logger.info("Task Watcher started. Listening to 'queue:leech'...")
-        while True:
+        while self.is_running:
+            # 1. DEFENSIVE INITIALIZATION (Fixes UnboundLocalError)
             task_id = None
+            tmdb_id = None
+            user_id = "0"
+            origin_chat_id = settings.TG_LOG_CHANNEL_ID
+            trigger_msg_id = None
+            user_tag = "User"
             try:
-                task = await self.redis.brpop("queue:leech", timeout=30)
+                task = await self.redis.brpop("queue:leech", timeout=10)
                 if not task: continue
-                if task:
-                    payload = task[1]
-                    logger.info(f"Consumed task: {payload}")
-                    try:
-                        # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id | 7:user_tag | 8:trigger_msg_id
-                        parts = payload.split("|")
-                        if len(parts) < 9: 
-                            logger.error("Malformed payload received."); continue   
 
-                        task_id = parts[0]
-                        tmdb_id = parts[1]
-                        raw_url = parts[2]
-                        type_hint = parts[3] if len(parts) > 3 else "auto"
-                        name_hint = parts[4] if len(parts) > 4 else ""
-                        user_id = parts[5] if len(parts) > 5 else "0"
-                        origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
-                        # Capture user_tag (fallback to 0 if old payload)
-                        user_tag = parts[7] if len(parts) > 7 else "0"
-                        trigger_msg_id = parts[8] if len(parts) > 8 else None
+                payload = task[1]
+                logger.info(f"Consumed task: {payload}")
+                # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id | 7:user_tag | 8:trigger_msg_id
+                parts = payload.split("|")
+                if len(parts) < 9: 
+                    logger.error("Malformed payload received."); continue   
 
-                        # Update Status to 'Downloading'
-                        status_key = f"task_status:{task_id}"
+                task_id = parts[0]
+                tmdb_id = parts[1]
+                raw_url = parts[2]
+                type_hint = parts[3] if len(parts) > 3 else "auto"
+                name_hint = parts[4] if len(parts) > 4 else ""
+                user_id = parts[5] if len(parts) > 5 else "0"
+                origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
+                # Capture user_tag (fallback to 0 if old payload)
+                user_tag = parts[7] if len(parts) > 7 else "0"
+                trigger_msg_id = parts[8] if len(parts) > 8 else None
 
-                        # 🛠️ DYNAMIC ENGINE DETECTION
-                        raw_url = parts[2]
-                        if raw_url.startswith("magnet") or ".torrent" in raw_url:
-                            engine_name = "Aria2 v1.36.0"
-                        else:
-                            engine_name = "YT-DLP Native"
+                # Update Status to 'Downloading'
+                status_key = f"task_status:{task_id}"
 
-                        # ✅ REGISTER TASK IN GLOBAL UI
-                        async with task_dict_lock:
-                            task_dict[task_id] = {
+                # 🛠️ DYNAMIC ENGINE DETECTION
+                raw_url = parts[2]
+                if raw_url.startswith("magnet") or ".torrent" in raw_url:
+                    engine_name = "Aria2 v1.36.0"
+                else:
+                    engine_name = "YT-DLP Native"
+
+                # ✅ REGISTER TASK IN GLOBAL UI
+                async with task_dict_lock:
+                    task_dict[task_id] = {
                                 "task_id": task_id,
                                 "name": name_hint or f"TMDB {tmdb_id}",
                                 "progress": 0,
@@ -264,27 +214,27 @@ class VideoWorker:
                                 "speed": "0B/s",
                                 "eta": "Calculating...",
                                 "origin_msg_id": trigger_msg_id # Stored for cleanup
-                            }
+                    }
 
                         # Update Status to 'Downloading' (Redis side)
-                        await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
-                        try: 
-                            # 1. Download
-                            target_info = downloader.get_direct_url(raw_url)
+                    await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
+                    try: 
+                        # 1. Download
+                        target_info = downloader.get_direct_url(raw_url)
 
-                            if not target_info:
-                                logger.error(f"❌ Could not resolve URL: {raw_url}")
-                                # Cleanup registry on error
-                                async with task_dict_lock: task_dict.pop(task_id, None)
-                                continue # Skip to next task
-
-                            local_path = await downloader.start_download(target_info, task_id=task_id)
-
-                        except Exception as dl_err:
-                            logger.error(f"Download Phase Failed: {dl_err}")
-                            # ✅ CLEANUP ON DL FAIL
+                        if not target_info:
+                            logger.error(f"❌ Could not resolve URL: {raw_url}")
+                            # Cleanup registry on error
                             async with task_dict_lock: task_dict.pop(task_id, None)
-                            continue
+                            continue # Skip to next task
+
+                        local_path = await downloader.start_download(target_info, task_id=task_id)
+
+                    except Exception as dl_err:
+                        logger.error(f"Download Phase Failed: {dl_err}")
+                        # ✅ CLEANUP ON DL FAIL
+                        async with task_dict_lock: task_dict.pop(task_id, None)
+                        continue
                         
                         if local_path and os.path.exists(local_path):
                             
@@ -336,12 +286,37 @@ class VideoWorker:
 
 async def main():
     worker = VideoWorker()
+
+    # 🟢 SETUP SIGNAL HANDLERS
+    loop = asyncio.get_running_loop()
+
+    # Define what happens when Docker sends SIGTERM
+    def handle_stop():
+        asyncio.create_task(worker.stop_services())
+        worker.shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_stop)
+
     try:
         await worker.init_services()
-        await worker.task_watcher()
-    except KeyboardInterrupt:
-        if hasattr(worker, 'aria2_proc'):
-            worker.aria2_proc.terminate()
+
+        # Run watcher and wait for shutdown signal
+        watcher_task = asyncio.create_task(worker.task_watcher())
+
+        # Wait here until signal is received
+        await worker.shutdown_event.wait()
+
+        # Signal received, wait for watcher to finish current cycle if needed
+        # (Optional: cancel watcher if you want instant kill)
+        watcher_task.cancel()
+
+    except asyncio.CancelledError:
+        pass
+    finally:
+        # Final safety net
+        if worker.is_running:
+            await worker.stop_services()
 
 if __name__ == "__main__":
     asyncio.run(main())
