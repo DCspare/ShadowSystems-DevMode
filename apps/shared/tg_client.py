@@ -14,6 +14,7 @@ logger = logging.getLogger("ShadowTG")
 class TgClient:
     _lock = asyncio.Lock()
     _hlock = asyncio.Lock()
+    _synced_peers = set() # 🔒 Tracked memory for handshakes
 
     bot: Client = None
     user: Client = None
@@ -140,11 +141,14 @@ class TgClient:
 
     @classmethod
     def register_refresh_handler(cls, client: Client):
-        """Shared Peer Seeder: Syncs AccessHash on any message in log channels"""
+        """Shared Peer Seeder: Syncs AccessHash only when needed"""
         async def refresh_peer_logic(client, message):
             targets = [settings.TG_LOG_CHANNEL_ID, settings.TG_BACKUP_CHANNEL_ID]
-            if message.chat.id in targets:
-                # Accessing chat properties forces Pyrogram to cache the Peer in SQLite
+            # 🛡️ FIX 1: Only log and sync if we haven't already this session
+            if message.chat.id in targets and message.chat.id not in cls._synced_peers:
+                # Triggers Peer Update
+                await client.resolve_peer(message.chat.id)
+                cls._synced_peers.add(message.chat.id)
                 logger.info(f"⚡ Peer Handshake Refreshed: {message.chat.title or message.chat.id}")
 
         client.add_handler(handlers.MessageHandler(refresh_peer_logic))
@@ -157,12 +161,20 @@ class TgClient:
         
         for cid in valid_ids:
             try:
-                # 1. Sync internal SQLite DB (Handshake part 1)
+                # 🛠️ STRATEGY: Directly resolve the peer. 
+                # If the bot has ever seen the group, this succeeds.
+                await cls.bot.resolve_peer(cid)
+
+                # Check get_chat to ensure it's in the SQLite local DB
                 await cls.bot.get_chat(cid)
 
-                logger.info(f"🛰️ Peer Synced: {cid}")
+                if cid not in cls._synced_peers:
+                    cls._synced_peers.add(cid)
+                    logger.info(f"🛰️ Peer Seeded: {cid}")
             except Exception as e:
-                logger.warning(f"⚠️ Peer Probe failed for {cid}: {e} Send 1 message to {cid} to trigger sync.")
+                # Log only once on failure
+                if cid not in cls._synced_peers:
+                    logger.warning(f"⚠️ Handshake missing for {cid}: {e}. Waiting for 1 message...")
 
     @classmethod
     async def send_startup_pulse(cls, node_name: str):
@@ -178,21 +190,20 @@ class TgClient:
         
         for cid in valid_ids:
             try:
-                me = await cls.bot.get_me()
-                
+                text=(
+                    f"<pre>Shadow Handshake: <b>ONLINE</b></pre>\n"
+                    f"┌ {'—' * 12}\n"
+                    f"├ <b>Name</b>: @{cls.bot.me.username}\n"
+                    f"├ <b>Node</b>: <code>{node_name}</code>\n"
+                    f"├ <b>Mode</b>: <code>{mode}</code>\n"  
+                    f"└ <b>Storage</b>: {'RAM' if settings.USE_IN_MEMORY_SESSION else 'DISK'}"
+                    f"{' (Premium)' if cls.IS_PREMIUM_USER else ''}"
+                )
+                # me = await cls.bot.get_me()
                 msg = await cls.bot.send_message(
                     chat_id=cid,
-                    text=(
-                        f"<pre>Shadow Handshake: <b>ONLINE</b></pre>\n"
-                        f"┌ {'—' * 12}\n"
-                        f"├ <b>Name</b>: @{cls.bot.me.username}\n"
-                        f"├ <b>Node</b>: <code>{node_name}</code>\n"
-                        f"├ <b>Mode</b>: <code>{mode}</code>\n"  
-                        f"└ <b>Storage</b>: {'RAM' if settings.USE_IN_MEMORY_SESSION else 'DISK'}"
-                        f"{' (Premium)' if cls.IS_PREMIUM_USER else ''}"
-                    )
+                    text=text
                 )
-                quote=True
                 await asyncio.sleep(10)
                 await msg.delete()
                 logger.info(f"✅ Peer Probe successful for {cid} from {node_name}")

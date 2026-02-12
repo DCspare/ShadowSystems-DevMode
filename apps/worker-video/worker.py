@@ -169,40 +169,43 @@ class VideoWorker:
             trigger_msg_id = None
             user_tag = "User"
             try:
-                task = await self.redis.brpop("queue:leech", timeout=10)
-                if not task: continue
+                task = await self.redis.brpop("queue:leech", timeout=1) 
+                if not task: 
+                    continue # This allows the loop to check 'is_running' every 1 second
 
-                payload = task[1]
-                logger.info(f"Consumed task: {payload}")
-                # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id | 7:user_tag | 8:trigger_msg_id
-                parts = payload.split("|")
-                if len(parts) < 9: 
-                    logger.error("Malformed payload received."); continue   
+                if task:
+                    payload = task[1]
+                    logger.info(f"Consumed task: {payload}")
+                    try:
+                        # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id | 7:user_tag | 8:trigger_msg_id
+                        parts = payload.split("|")
+                        if len(parts) < 9: 
+                            logger.error("Malformed payload received."); continue   
 
-                task_id = parts[0]
-                tmdb_id = parts[1]
-                raw_url = parts[2]
-                type_hint = parts[3] if len(parts) > 3 else "auto"
-                name_hint = parts[4] if len(parts) > 4 else ""
-                user_id = parts[5] if len(parts) > 5 else "0"
-                origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
-                # Capture user_tag (fallback to 0 if old payload)
-                user_tag = parts[7] if len(parts) > 7 else "0"
-                trigger_msg_id = parts[8] if len(parts) > 8 else None
+                        task_id = parts[0]
+                        tmdb_id = parts[1]
+                        raw_url = parts[2]
+                        type_hint = parts[3] if len(parts) > 3 else "auto"
+                        name_hint = parts[4] if len(parts) > 4 else ""
+                        user_id = parts[5] if len(parts) > 5 else "0"
+                        origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
+                        # Capture user_tag (fallback to 0 if old payload)
+                        user_tag = parts[7] if len(parts) > 7 else "0"
+                        trigger_msg_id = parts[8] if len(parts) > 8 else None
 
-                # Update Status to 'Downloading'
-                status_key = f"task_status:{task_id}"
+                        # Update Status to 'Downloading'
+                        status_key = f"task_status:{task_id}"
 
-                # 🛠️ DYNAMIC ENGINE DETECTION
-                raw_url = parts[2]
-                if raw_url.startswith("magnet") or ".torrent" in raw_url:
-                    engine_name = "Aria2 v1.36.0"
-                else:
-                    engine_name = "YT-DLP Native"
+                        # 🛠️ DYNAMIC ENGINE DETECTION
+                        raw_url = parts[2]
+                        if raw_url.startswith("magnet") or ".torrent" in raw_url:
+                            engine_name = "Aria2 v1.36.0"
+                        else:
+                            engine_name = "YT-DLP Native"
 
-                # ✅ REGISTER TASK IN GLOBAL UI
-                async with task_dict_lock:
-                    task_dict[task_id] = {
+                        # ✅ REGISTER TASK IN GLOBAL UI
+                        async with task_dict_lock:
+                            task_dict[task_id] = {
                                 "task_id": task_id,
                                 "name": name_hint or f"TMDB {tmdb_id}",
                                 "progress": 0,
@@ -214,27 +217,27 @@ class VideoWorker:
                                 "speed": "0B/s",
                                 "eta": "Calculating...",
                                 "origin_msg_id": trigger_msg_id # Stored for cleanup
-                    }
+                            }
 
                         # Update Status to 'Downloading' (Redis side)
-                    await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
-                    try: 
-                        # 1. Download
-                        target_info = downloader.get_direct_url(raw_url)
+                        await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
+                        try: 
+                            # 1. Download
+                            target_info = downloader.get_direct_url(raw_url)
 
-                        if not target_info:
-                            logger.error(f"❌ Could not resolve URL: {raw_url}")
-                            # Cleanup registry on error
+                            if not target_info:
+                                logger.error(f"❌ Could not resolve URL: {raw_url}")
+                                # Cleanup registry on error
+                                async with task_dict_lock: task_dict.pop(task_id, None)
+                                continue # Skip to next task
+
+                            local_path = await downloader.start_download(target_info, task_id=task_id)
+
+                        except Exception as dl_err:
+                            logger.error(f"Download Phase Failed: {dl_err}")
+                            # ✅ CLEANUP ON DL FAIL
                             async with task_dict_lock: task_dict.pop(task_id, None)
-                            continue # Skip to next task
-
-                        local_path = await downloader.start_download(target_info, task_id=task_id)
-
-                    except Exception as dl_err:
-                        logger.error(f"Download Phase Failed: {dl_err}")
-                        # ✅ CLEANUP ON DL FAIL
-                        async with task_dict_lock: task_dict.pop(task_id, None)
-                        continue
+                            continue
                         
                         if local_path and os.path.exists(local_path):
                             
@@ -273,8 +276,12 @@ class VideoWorker:
                         logger.error(f"Task Payload Error: {e}")
                         await asyncio.sleep(2)
 
+            except asyncio.CancelledError:
+                # 🛠️ CRITICAL: Don't catch this as an "error". Raise it to exit the loop.
+                raise 
             except Exception as e:
-                logger.error(f"Loop Error: {e}")
+                # Catch actual errors (Redis timeout, malformed data, etc)
+                logger.error(f"Watcher Loop Error: {e}")
                 await asyncio.sleep(2)
 
             finally:
@@ -284,6 +291,30 @@ class VideoWorker:
                                 task_dict.pop(task_id, None)
                                 logger.info(f"🧹 Registry cleaned for {task_id}")
 
+async def stop_services(self):
+        """🛑 GRACEFUL SHUTDOWN ROUTINE"""
+        if not self.is_running:
+            return
+
+        logger.info("🛑 Shutdown Signal Received. Cleaning up...")
+        self.is_running = False
+        
+        # 1. Kill Aria2
+        if hasattr(self, 'aria2_proc'):
+            try:
+                self.aria2_proc.terminate()
+                self.aria2_proc.wait(timeout=5)
+            except Exception:
+                self.aria2_proc.kill()
+        
+        # 2. Stop Pyrogram (THIS SAVES THE HANDSHAKE)
+        try:
+            logger.info("⏳ Saving Pyrogram Session (merging journal)...")
+            await TgClient.stop()
+            logger.info("✅ Pyrogram Session Saved & Closed.")
+        except Exception as e:
+            logger.error(f"Error during TgClient shutdown: {e}")
+
 async def main():
     worker = VideoWorker()
 
@@ -292,8 +323,8 @@ async def main():
 
     # Define what happens when Docker sends SIGTERM
     def handle_stop():
-        asyncio.create_task(worker.stop_services())
-        worker.shutdown_event.set()
+        # Using a sync threadsafe call to ensure event loop wakes up
+        loop.call_soon_threadsafe(worker.shutdown_event.set)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, handle_stop)
@@ -306,17 +337,33 @@ async def main():
 
         # Wait here until signal is received
         await worker.shutdown_event.wait()
+        logger.warning("🏁 Shutdown sequence initiated...")
 
-        # Signal received, wait for watcher to finish current cycle if needed
-        # (Optional: cancel watcher if you want instant kill)
-        watcher_task.cancel()
+        # # Signal received, wait for watcher to finish current cycle if needed
+        # # (Optional: cancel watcher if you want instant kill)
+        # watcher_task.cancel()
 
-    except asyncio.CancelledError:
-        pass
+    except Exception as e:
+        logger.error(f"Fatal Startup Error: {e}")
     finally:
-        # Final safety net
-        if worker.is_running:
-            await worker.stop_services()
+        # 🛠️ SYSTEMATIC TEARDOWN
+        logger.info("📦 Beginning Systematic Teardown...")
+        
+        # A. Stop Watcher
+        if 'watcher_task' in locals():
+            watcher_task.cancel()
+            try:
+                await asyncio.wait_for(watcher_task, timeout=5)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        # B. Run the shutdown routine (SQLite save)
+        await worker.stop_services()
+        
+        # C. Flush all logs and end
+        logger.info("💀 Shadow Worker Offline.")
+        # Ensure we exit even if background loops are hung
+        sys.exit(0)
 
 if __name__ == "__main__":
     asyncio.run(main())
