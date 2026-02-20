@@ -6,6 +6,7 @@ import asyncio
 import signal
 import logging
 import subprocess
+import shutil 
 sys.path.append("/app/shared")
 from redis.asyncio import Redis
 from shared.tg_client import TgClient
@@ -81,12 +82,15 @@ class VideoWorker:
                 "--rpc-listen-all=false", 
                 "--rpc-allow-origin-all",
                 f"--dir={dl_path}",
-                
-                # CRITICAL FIXES FOR ERR 16 / ABORT
-                "--file-allocation=none",       # Stop pre-allocating disk space (Fixes Docker Error)
-                "--disk-cache=0",               # Disable RAM caching (Prevent buffer lag)
-                "--max-connection-per-server=4",# Keep connections low to avoid Google/Host blocks
+                "--file-allocation=none", # Stop pre-allocating disk space (Fixes Docker Error)
+                "--disk-cache=0", # Disable RAM caching (Prevent buffer lag)
+                "--max-connection-per-server=4",    # Keep connections low to avoid Google/Host blocks
                 "--min-split-size=10M",
+                "--dht-listen-port=6881",
+                "--listen-port=6881",
+                "--bt-enable-lpd=true",  # Local Peer Discovery
+                "--enable-dht=true",
+                "--user-agent=Transmission/3.00", # Sometimes masks bot traffic
                 "--quiet"
             ]
             self.aria2_proc = subprocess.Popen(command)
@@ -140,22 +144,35 @@ class VideoWorker:
         # 4. Handshake Pulse
         await TgClient.send_startup_pulse(f"WORKER-{self.session_name.upper()}") # 🛰️ Visible Handshake check
 
+        await asyncio.sleep(2) 
+
         # 5. Start Status Manager Heartbeat
         self.status_mgr = StatusManager(self.app)
         asyncio.create_task(self.status_mgr.update_heartbeat()) # Background Loop
         
     async def stop_services(self):
         """🛑 GRACEFUL SHUTDOWN ROUTINE"""
+        if not self.is_running:
+            return
+
         logger.info("🛑 Shutdown Signal Received. Cleaning up...")
         self.is_running = False
         
         # 1. Kill Aria2
         if hasattr(self, 'aria2_proc'):
-            self.aria2_proc.terminate()
+            try:
+                self.aria2_proc.terminate()
+                self.aria2_proc.wait(timeout=5)
+            except Exception:
+                self.aria2_proc.kill()
         
-        # 2. Stop Pyrogram (CRITICAL: This saves the SQLite Session)
-        await TgClient.stop()
-        logger.info("✅ Pyrogram Session Saved & Closed.")
+        # 2. Stop Pyrogram (THIS SAVES THE HANDSHAKE)
+        try:
+            logger.info("⏳ Saving Pyrogram Session (merging journal)...")
+            await TgClient.stop()
+            logger.info("✅ Pyrogram Session Saved & Closed.")
+        except Exception as e:
+            logger.error(f"Error during TgClient shutdown: {e}")
 
     async def task_watcher(self):
         """Watch Redis"""
@@ -272,9 +289,38 @@ class VideoWorker:
                         else:
                             logger.error("Download ghosted.")
 
-                    except Exception as e:
-                        logger.error(f"Task Payload Error: {e}")
+                    except Exception as task_err:
+                        logger.error(f"❌ Task {task_id} Failed: {task_err}")
+
+                        # 🛠️ SYSTEMATIC FAILURE CLEANUP
+                        if self.redis:
+                            # 1. Update status to Failed in Redis
+                            await self.redis.hset(f"task_status:{task_id}", "status", "failed")
+                            # 2. Force expire the status so it clears from /status later
+                            await self.redis.expire(f"task_status:{task_id}", 300)
+                            # 3. IMPORTANT: Release the User's slot so they aren't blocked!
+                            if user_id != "0":
+                                limit_key = f"active_user_tasks:{user_id}"
+                                await self.redis.srem(limit_key, task_id)
+                                logger.info(f"🔓 Emergency Slot Release for {user_tag}")
+                        
+                        # ✅ Send a notification to the user about the failure
+                        try:
+                            error_message = str(task_err).replace('<', '').replace('>', '') # Sanitize
+                            await self.app.send_message(
+                                chat_id=int(origin_chat_id),
+                                text=(
+                                    f"❌ <b>Task Failed for {user_tag}</b>\n\n"
+                                    f"<b>Task ID:</b> <code>{task_id}</code>\n"
+                                    f"<b>Reason:</b> <pre>{error_message[:250]}</pre>\n\n"
+                                    f"The queue has been cleared and your slot has been released."
+                                )
+                            )
+                        except Exception as notify_err:
+                            logger.error(f"Failed to send failure notification: {notify_err}")
+
                         await asyncio.sleep(2)
+                        continue # Move to the next task in queue
 
             except asyncio.CancelledError:
                 # 🛠️ CRITICAL: Don't catch this as an "error". Raise it to exit the loop.
@@ -290,30 +336,6 @@ class VideoWorker:
                             if task_id in task_dict:
                                 task_dict.pop(task_id, None)
                                 logger.info(f"🧹 Registry cleaned for {task_id}")
-
-async def stop_services(self):
-        """🛑 GRACEFUL SHUTDOWN ROUTINE"""
-        if not self.is_running:
-            return
-
-        logger.info("🛑 Shutdown Signal Received. Cleaning up...")
-        self.is_running = False
-        
-        # 1. Kill Aria2
-        if hasattr(self, 'aria2_proc'):
-            try:
-                self.aria2_proc.terminate()
-                self.aria2_proc.wait(timeout=5)
-            except Exception:
-                self.aria2_proc.kill()
-        
-        # 2. Stop Pyrogram (THIS SAVES THE HANDSHAKE)
-        try:
-            logger.info("⏳ Saving Pyrogram Session (merging journal)...")
-            await TgClient.stop()
-            logger.info("✅ Pyrogram Session Saved & Closed.")
-        except Exception as e:
-            logger.error(f"Error during TgClient shutdown: {e}")
 
 async def main():
     worker = VideoWorker()

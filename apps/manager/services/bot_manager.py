@@ -2,7 +2,10 @@
 import os 
 import logging
 from shared.tg_client import TgClient
+from pyrogram import Client
+from shared.settings import settings
 
+TgClient.setup_logging() 
 logger = logging.getLogger("BotManager")
 
 class ShadowManager:
@@ -13,11 +16,18 @@ class ShadowManager:
     async def start(self):
         """Initializes and starts the Pyrogram Client"""
         logger.info("Starting Manager Bot...")
+
+        # Smart Plugin Loader
+        # Tells Pyrogram to look in "handlers" folder for decorators
+        plugins_config = dict(
+            root="handlers" 
+        )
         
-        # We start Bot vs User 
-        await TgClient.start_bot(name="manager_bot")
+         # 1. Initialize Identities (Bot vs User) 
+        await TgClient.start_bot(name="manager_bot", plugins=plugins_config)
         await TgClient.start_user()
 
+        # Determine the primary handler (Usually Bot for Admin Commands)
         self.app = TgClient.bot or TgClient.user # Link for handler compatibility
 
         # 🛰️ Enable Verification Pulse for Manager

@@ -456,3 +456,6 @@ Now, you can just type:
 dcd up -d
 dcd logs -f manager
 dcd build
+
+npx repomix --style markdown --include "apps/stream-engine" --output shadow_streamE
+ngine.md

@@ -50,6 +50,7 @@ services:
     container_name: sv-worker-video-dev
     env_file: .env
     environment:
+      - PYTHONUNBUFFERED=1
       - WORKER_MODE=BOT         # 🤖 Worker stays as Bot only
       - SESSION_FILE=leech_1    # .session file name in ./data/sessions
     volumes:

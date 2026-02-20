@@ -26,7 +26,7 @@ async def leech_command(client, message):
         # 1. URL
         parts = text.split(" ", 2)
         if len(parts) < 2: 
-            return await message.reply_text("❌ Usage: `/leech [URL] [TMDB_ID] [type] [name]`")
+            return await message.reply_text("❌ Usage: <b>/leech [URL] [TMDB_ID] [type] [name]</code>")
         url = parts[1]
         
         # Default Params
@@ -51,9 +51,6 @@ async def leech_command(client, message):
                 # Join remaining args and strip quotes
                 if len(sub_args) > 2:
                     name_hint = " ".join(sub_args[2:]).strip('"')
-            # else:
-            #     # User skip ID/Type? Dangerous but assume raw name override
-            #     pass
 
         # Queue Logic
         if db_service.redis:
@@ -68,11 +65,11 @@ async def leech_command(client, message):
                 if active_count >= settings.MAX_TASKS_PER_USER:
                     # Fetch IDs to show the user
                     active_ids = await db_service.redis.smembers(limit_key)
-                    ids_str = ", ".join([f"`{i}`" for i in active_ids])
+                    ids_str = ", ".join([f"<code>{i}</code>" for i in active_ids])
                     return await message.reply_text(
-                        f"⚠️ **Limit Reached!**\n"
-                        f"You have `{active_count}` active tasks: {ids_str}\n\n"
-                        f"Please wait for them to finish or `/cancel` one to start a new task."
+                        f"⚠️ <b>Limit Reached!</b>\n"
+                        f"You have <code>{active_count}</code> active tasks: {ids_str}\n\n"
+                        f"Please wait for them to finish or <code>/cancel</code> one to start a new task."
                     )
 
             # Prepare User Tag (Username or First Name)
@@ -95,12 +92,12 @@ async def leech_command(client, message):
             
             # Reply with Buttons
             response_text = (
-                f"🚀 **Task Queued**\n"
-                f"{'—' * 15}\n"
-                f"🆔 ID: `{task_id}`\n"
-                f"📦 Content: `{tmdb_id}` ({type_hint.upper()})\n"
-                f"📡 Status: `Added in Queue...`\n"
-                f"📜 Channel: [Open Log]({chan_link})"
+                f"<pre>🚀 Task Queued</pre>\n"
+                f"{'—' * 12}\n"
+                f"🆔 ID: <code>{task_id}</code>\n"
+                f"📦 Content: <code>{tmdb_id}</code> ({type_hint.upper()})\n"
+                f"📡 Status: <code>Added in Queue...</code>\n"
+                f"📜 Channel: <a href='{chan_link}'>Open Log</a>"
             )
 
             # 5. Send to DM if in group, else reply in DM
@@ -109,7 +106,7 @@ async def leech_command(client, message):
                     # Send info to Owner DM
                     sent_msg = await client.send_message(
                         chat_id=OWNER_ID, 
-                        text=response_text + f"\n\n📍 *Triggered in: {message.chat.title}*",
+                        text=response_text + f"\n\n📍 <i>Triggered in: {message.chat.title}</i>",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📊 Status", callback_data="check_status")]])
                     )
                 else:
@@ -151,7 +148,7 @@ async def leech_command(client, message):
 @Client.on_message(filters.command("cancel") & filters.user(OWNER_ID))
 async def cancel_task(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("Usage: `/cancel task_id` or click link in status.")
+        return await message.reply_text("Usage: <code>/cancel task_id</code> or click link in status.")
     
     task_id = message.command[1]
     status_key = f"task_status:{task_id}"
@@ -161,13 +158,17 @@ async def cancel_task(client, message):
     active_statuses = ["queued", "downloading", "uploading"]
 
     if not data or data.get("status") not in active_statuses:
-        return await message.reply_text(f"❌ **Task `{task_id}`** is not in an active state or doesn't exist.")
+        return await message.reply_text(f"❌ <b>Task <code>{task_id}</code></b> is not in an active state or doesn't exist.")
 
     # Set a Kill Flag in Redis
     await db_service.redis.set(f"kill_signal:{task_id}", "1", ex=300)
     await db_service.redis.hset(status_key, "status", "cancelling")
+
+    # NEW: Remove from user's active set immediately so they can try again 
+    # without waiting for the slow worker to acknowledge.
+    await db_service.redis.srem(f"active_user_tasks:{OWNER_ID}", task_id)
     
-    await message.reply_text(f"🛑 Kill signal sent to Task `{task_id}`. Waiting for Worker to Abort...")
+    await message.reply_text(f"🛑 Cancel requested for <code>{task_id}</code>. User slot released.")
 
 # Enables clicking /cancel_ID directly from the status message
 @Client.on_message(filters.regex(r"^/cancel_([a-fA-F0-9]+)") & filters.user(OWNER_ID))
@@ -204,7 +205,7 @@ async def build_status_text():
             try:
                 prog_int = int(float(progress))
                 filled = min(max(prog_int // 10, 0), 10)
-                progress_bar = f"\n   └ `[{'■' * filled}{'□' * (10 - filled)}]` {prog_int}%"
+                progress_bar = f"\n   └ <code>[{'■' * filled}{'□' * (10 - filled)}]</code> {prog_int}%"
             except: 
                 progress_bar = f" ({progress}%)"
             
@@ -214,10 +215,10 @@ async def build_status_text():
             #           └ 🆔 ID:
             #           └ 🛑 /cancel_task_id
             active_lines.append(
-                f"⚡ **{name}**\n"
-                f"   └ 🛠️ Status: `{status}`{progress_bar}\n"
-                f"   └ 🆔 ID: `{task_id}`\n"
-                f"   └ 🛑 /cancel_{task_id}"
+                f"⚡ <b>{name}</b>\n"
+                f"   └ 🛠️ Status: <code>{status}</code>{progress_bar}\n"
+                f"   └ 🆔 ID: <code>{task_id}</code\n"
+                f"   └ 🛑 /cancel_{task_id}\n\n"
             )
 
     queue_items = await db_service.redis.lrange("queue:leech", 0, -1)
@@ -227,12 +228,12 @@ async def build_status_text():
         t_id = parts[0]
         # Robust name hint extraction
         n_hint = parts[4] if len(parts) > 4 and parts[4] else f"TMDB {parts[1]}"
-        pending_lines.append(f"`{i+1}.` **{n_hint}** (ID: `{t_id}`)")
+        pending_lines.append(f"<code>{i+1}.</code> <b>{n_hint}</b> (ID: <code>{t_id}</code>)")
 
-    header = "🛰️ **Shadow Systems Status**\n" + ("—" * 15)
-    active_section = "\n\n🔄 **ACTIVE TASKS**\n" + ("\n".join(active_lines) if active_lines else "_No active workers._")
-    queue_section = "\n\n⏳ **PENDING QUEUE**\n" + ("\n".join(pending_lines) if pending_lines else "_Queue is empty._")
-    footer = f"\n\n📊 **Total Pending:** `{len(queue_items)}`"
+    header = "🛰️ <b>Shadow Systems Status</b>\n" + ("—" * 15)
+    active_section = "\n\n🔄 <b>ACTIVE TASKS</b>\n" + ("\n".join(active_lines) if active_lines else "_No active workers._")
+    queue_section = "\n\n⏳ <b>PENDING QUEUE</b>\n" + ("\n".join(pending_lines) if pending_lines else "_Queue is empty._")
+    footer = f"\n\n📊 <b>Total Pending:</b> <code>{len(queue_items)}</code>"
     
     return header + active_section + queue_section + footer
 

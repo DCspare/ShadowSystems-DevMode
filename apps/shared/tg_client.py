@@ -39,14 +39,15 @@ class TgClient:
         root.setLevel(logging.INFO)
 
     @classmethod
-    def create_pyro_client(cls, name: str, bot_token: str = None, session_string: str = None, no_updates: bool = False):
+    def create_pyro_client(cls, name: str, bot_token: str = None, session_string: str = None, no_updates: bool = False, plugins: dict = None):
         """Unified Client Builder"""
         kwargs = {
             "api_id": settings.TG_API_ID,
             "api_hash": settings.TG_API_HASH,
             "parse_mode": enums.ParseMode.HTML,
             "in_memory": settings.USE_IN_MEMORY_SESSION, # 🔑 Toggle via settings
-            "workdir": "/app/sessions"
+            "workdir": "/app/sessions",
+            "plugins": plugins # 🔑 Optional Plugins
         }
 
         # 🔑 PRIORITY: Bot Token > Session String
@@ -56,17 +57,42 @@ class TgClient:
             kwargs["session_string"] = session_string
 
         # Max Performance Tuning from WZML-X
+        # In apps/shared/tg_client.py
+
+    @classmethod
+    def create_pyro_client(cls, name: str, bot_token: str = None, session_string: str = None, no_updates: bool = False, plugins: dict = None):
+        """Unified Client Builder with enhanced network stability."""
+        kwargs = {
+            "api_id": settings.TG_API_ID,
+            "api_hash": settings.TG_API_HASH,
+            "parse_mode": enums.ParseMode.HTML,
+            "in_memory": settings.USE_IN_MEMORY_SESSION,
+            "workdir": "/app/sessions",
+            "plugins": plugins
+        }
+
+        if bot_token and len(bot_token) > 10:
+            kwargs["bot_token"] = bot_token
+        elif session_string and len(session_string) > 20:
+            kwargs["session_string"] = session_string
+
+        # ✅ FIX: Add robust connection and timeout settings
+        # Increase retries for network flaps and set a longer timeout for operations.
         for param, value in {
             "max_concurrent_transmissions": 100,
-            "sleep_threshold": 60,
+            "sleep_threshold": 120, # Increase flood wait tolerance
+            "connection_retries": 5, # Retry up to 5 times on connection errors
+            "timeout": 30 # Set a 30-second timeout for API calls
         }.items():
             if param in signature(Client.__init__).parameters:
                 kwargs[param] = value
 
         return Client(name, no_updates=no_updates, **kwargs)
 
+        return Client(name, no_updates=no_updates, **kwargs)
+
     @classmethod
-    async def start_bot(cls, name: str = "ShadowBot", token_override: str = None):
+    async def start_bot(cls, name: str = "ShadowBot", token_override: str = None, plugins: dict = None):
         """Starts the Primary Bot identity for the specific node (Manager or Worker)"""
         target_token = token_override or settings.TG_BOT_TOKEN
         if not target_token or len(target_token) < 10:
@@ -75,7 +101,7 @@ class TgClient:
         
         async with cls._lock:
             if cls.bot: return True
-            cls.bot = cls.create_pyro_client(name, bot_token=target_token)
+            cls.bot = cls.create_pyro_client(name, bot_token=target_token, plugins=plugins)
             await cls.bot.start()
             cls.register_refresh_handler(cls.bot)
             logger.info(f"✅ Bot Identity [@{cls.bot.me.username}] is ONLINE.")

@@ -13,7 +13,8 @@ from services.bot_manager import bot_manager
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-TgClient.setup_logging() 
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Manager")
 
 class GatekeeperMiddleware(BaseHTTPMiddleware):
