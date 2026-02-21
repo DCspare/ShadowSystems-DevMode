@@ -17,49 +17,51 @@ class StatusManager:
         self.status_msg = None  # Holds the ONE active status message
         self.last_update = 0
         self.is_running = False
+        self.start_time = time.time()
 
     async def get_readable_message(self):
         """Builds the MLTB-Style UI text."""
         async with task_dict_lock:
-            tasks = list(task_dict.values())
+            tasks = [v for v in task_dict.values() if isinstance(v, dict)]
         
         if not tasks:
             return None, None
 
-        msg = f"🛰️ **Shadow Systems Status**\n"
-        msg += f"<code>📦 **Task Running:** {len(tasks)}/{settings.MAX_TOTAL_TASKS}</code>\n"
+        msg = f"<pre>🛰️ Shadow Systems Status</pre>\n"
+        msg += f"<pre>📦 <b>Task Running:</b> {len(tasks)}/{settings.MAX_TOTAL_TASKS}</pre>\n"
         msg += "—" * 12 + "\n\n"
 
         for index, task in enumerate(tasks, start=1):
+            t_id = task.get('task_id', 'Unknown')
             t_status = task.get('status', 'Queued')
-            t_name = escape(task.get('name', 'Unknown')) # Security: Escape HTML
-            t_id = task.get('task_id')
+            t_name = escape(str(task.get('name', 'Unknown'))) # Security: Escape HTML
             pct = task.get('progress', 0)
-            user_tag = task.get('user_tag', 'User') # New
+            user_tag = escape(str(task.get('user_tag', 'User')))
             engine = task.get('engine', 'Shadow-V2') # New
             
             # Accurate Bar logic
             bar = ProgressManager.get_bar(pct)
             
             # Message Format
-            msg += f"**{index}. {t_status}:**\n"
+            msg += f"<b>{index}. {t_status}:</b>\n"
             msg += f"<code>{t_name}</code>\n"
             msg += f"{bar} {pct}%\n"
-            msg += f"**Processed:** {task.get('processed', '0B')} of {task.get('size', '0B')}\n"
-            msg += f"**Speed:** {task.get('speed', '0B/s')}\n"
-            msg += f"**ETA:** {task.get('eta', '0s')}\n"
-            msg += f"**Engine:** `{engine}`\n" 
+            msg += f"<b>Processed:</b> {task.get('processed', '0B')} of {task.get('size', '0B')}\n"
+            msg += f"<b>Speed:</b> {task.get('speed', '0B/s')}\n"
+            msg += f"<b>ETA:</b> {task.get('eta', '0s')}\n"
+            msg += f"<b>Engine:</b> <code>{engine}</code>\n" 
             msg += f"👤 {user_tag}\n"         
-            msg += f"🆔 `{t_id}`\n"
+            msg += f"🆔 <code>{t_id}</code>\n"
             msg += f"🛑 /cancel_{t_id}\n\n"
 
         # Footer including System Health
         stats = SystemMonitor.get_stats()
         msg += "—" * 12 + "\n"
-        msg += f"💻 **CPU:** {stats['cpu']}%\n"
-        msg += f"🧠 **RAM:** {stats['mem']}%\n"
-        msg += f"💾 **FREE:** {stats['free']}\n"
-        msg += f"⏱️ **UPTIME:** {ProgressManager.get_readable_time(int(time.time() - self.client.start_time))}"
+        msg += f"💻 <b>CPU:</b> {stats['cpu']}%\n"
+        msg += f"🧠 <b>RAM:</b> {stats['mem']}%\n"
+        msg += f"💾 <b>FREE:</b> {stats['free']}\n"
+        uptime_sec = int(time.time() - self.start_time)
+        msg += f"⏱️ <b>UPTIME:</b> {ProgressManager.get_readable_time(uptime_sec)}"
 
         buttons = InlineKeyboardMarkup([
             [InlineKeyboardButton("♻️ Refresh Status", callback_data="check_status")]
@@ -110,13 +112,14 @@ class StatusManager:
             except FloodWait as f:
                 logger.warning(f"⚠️ FloodWait: Sleeping for {f.value}s")
                 await asyncio.sleep(f.value)
-            except (MessageNotModified, MessageIdInvalid):
+            except MessageNotModified:
                 pass
-
+            except MessageIdInvalid:
+                # Allows a new UI message to spawn if original gets deleted by Admin
+                self.status_msg = None 
             except Exception as e:
-                if "MESSAGE_NOT_MODIFIED" not in str(e):
-                    logger.debug(f"Heartbeat Error: {e}")
-                if "MESSAGE_ID_INVALID" in str(e):
-                    self.status_msg = None # Reset if deleted
+                logger.error(f"Heartbeat CRASH: {e}", exc_info=True)
+                # Optional: To prevent spamming, you could add a sleep here
+                await asyncio.sleep(30)
             
             await asyncio.sleep(settings.STATUS_UPDATE_INTERVAL)

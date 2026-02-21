@@ -19,73 +19,75 @@ To bypass hardware constraints during building, we utilize **"Potato-Mode" Workf
 
 ```text
 SHADOW-SYSTEMS (Root)
-├── apps/                         # Monorepo Components
-│   ├── gateway/                  # Nginx Load Balancer (Secure Link Logic)
-│   │   ├── Dockerfile
-│   │   └── nginx.conf.template
-│   ├── manager/                  # FastAPI Brain (Auth, Metadata, API)
-│       ├── core/
-│       │   ├── __init__.py
-│       │   ├── config.py
-│       │   ├── security.py
-│       │   └── utils.md         # Moved to `apps/shared/`
-│       ├── handlers/
-│       │   └── cmd_leech.py
-│       ├── routers/
-│       │   └── library.py
-│       │   └── auth.py          # /guest and JWT Tokens Authentication & Authorization
-│       │   └── admin.py         # /users /stats Admin Panel Routes (Dashboard) & API Management Logic 
-│       ├── services/
-│       │   ├── __init__.py
-│       │   ├── bot_manager.py
-│       │   ├── database.py
-│       │   └── metadata.py
-│       ├── Dockerfile
-│       ├── main.py
-│       └── requirements.txt
-...
-│   ├── shared/                   # Shared Kernel (The "Dry" Logic)
-│   │   ├── __init__.py
-│   │   ├── database.py           # Shared DB Connector
-│   │   ├── formatter.py          # Centralized Telegram visual styling
-│   │   ├── progress.py           # Progress Tracking Logic
-│   │   ├── registry.py           # Shared Container Registry
-│   │   ├── schemas.py            # Pydantic Sources of Truth
-│   │   ├── settings.py           # Master Pydantic Config (Environment Source of Truth) 
-│   │   └── utils.py              # Shared Utility Functions
-...
-│   ├── stream-engine/            # Golang High-Performance Passthrough
-│       ├── core/
-│       │   ├── downloader.py   
-│       │   └── telegram.py
-│       ├── Dockerfile
-│       └── main.go
-...
-│   ├── web/                      # Next.js Frontend (Obsidian Glass UI)
-...
-│   ├── worker-manga/             # Specialized ReadVault Scrapers
-...
-│   ├── worker-video/             # High-Speed Video Swarm
-│       ├── handlers/             # Logic Pipelines
-│       │   ├── downloader.py     # Hybrid Aria2 + Native HTTP Engine
-│       │   ├── flow_ingest.py    # Identity Sanitization & Transfer Core (Formerly leech.py)
-│       │   ├── processor.py      # FFmpeg Media & Screenshot Engine
-│       │   └── Status_manager.py #
-│       ├── Dockerfile            # Python 3.12 Media Image
-│       ├── entrypoint.sh
-│       ├── requirements.txt      # Version-pinned Media Libs
-│       └── worker.py             # Redis Task Watcher & Bot identity
-├── config/                       # External Configuration & Session Storage
+├── apps
+│   ├── gateway/                  # NGINX Reverse Proxy
+│   │   ├── Dockerfile            # Builds the NGINX image
+│   │   └── nginx.conf.template   # NGINX configuration template
+│   ├── manager/                  # FastAPI Backend (Admin Panel & API)
+│   │   ├── core/
+│   │   │   ├── __init__.py       # Makes the 'core' directory a Python package
+│   │   │   ├── config.md         # (Deprecated)
+│   │   │   ├── security.py       # Handles authentication and authorization
+│   │   │   └── utils.md          # (Deprecated) Documentation for manager utilities
+│   │   ├── handlers/
+│   │   │   └── cmd_leech.py      # Contains logic to handle the /leech command from Telegram
+│   │   ├── routers/
+│   │   │   ├── admin.py          # API endpoints for administration and system stats
+│   │   │   ├── auth.py           # API endpoints for user authentication (magic link, guest access)
+│   │   │   └── library.py        # API endpoints for searching and managing the media library
+│   │   ├── services/
+│   │   │   ├── __init__.py       # Makes the 'services' directory a Python package
+│   │   │   ├── bot_manager.py    # Manages the Pyrogram client for interacting with Telegram
+│   │   │   ├── database.md       # (Deprecated)
+│   │   │   └── metadata.py       # Service for fetching metadata from TMDB and other sources
+│   │   ├── Dockerfile            # Builds the Docker image for the FastAPI manager application
+│   │   ├── main.py               # Main entrypoint for the FastAPI application
+│   │   └── requirements.txt      # Lists the Python dependencies for the manager app
+│   ├── shared/                   # Shared Python code used by both Manager and Workers
+│   │   ├── __init__.py           # Makes the 'shared' directory a Python package
+│   │   ├── database.py           # Handles connection to the MongoDB database
+│   │   ├── formatter.py          # Logic for creating aesthetically pleasing Telegram message formats
+│   │   ├── progress.py           # Calculates and formats download/upload progress and speed
+│   │   ├── registry.py           # A state manager for tracking active tasks (downloads, uploads)
+│   │   ├── schemas.py            # Pydantic models for data validation and serialization
+│   │   ├── settings.py           # Centralized configuration management using Pydantic's BaseSettings
+│   │   ├── tg_client.py          # Wrapper for the Telegram client (Pyrogram)
+│   │   └── utils.py              # General utility functions shared across applications
+│   ├── stream-engine/            # Golang high-performance stream handler
+│   │   ├── core/
+│   │   │   ├── downloader.go     # Handles the downloading of file chunks from Telegram
+│   │   │   └── telegram.go       # Establishes and manages the core connection to Telegram
+│   │   ├── Dockerfile            # Builds the Docker image for the Go stream-engine
+│   │   ├── go.mod                # Declares the Go module's path and dependencies
+│   │   ├── go.sum                # Contains the checksums of the Go module dependencies
+│   │   └── main.go               # Main entrypoint for the Go HTTP server that handles streaming
+│   ├── worker-video/             # Celery worker for video processing tasks
+│   │   ├── handlers/
+│   │   │   ├── downloader.py     # Manages the file download process (Aria2/yt-dlp)
+│   │   │   ├── flow_ingest.py    # Orchestrates the main workflow: download -> process -> upload
+│   │   │   ├── processor.py      # Handles video processing using FFmpeg (screenshots, samples)
+│   │   │   └── status_manager.py # Manages and updates the status message on Telegram
+│   │   ├── Dockerfile            # Builds the Docker image for the video worker
+│   │   ├── entrypoint.sh         # Script that runs on container startup, ensures permissions
+│   │   ├── requirements.txt      # Lists the Python dependencies for the video worker
+│   │   └── worker.py             # Main entrypoint for the Celery worker, defines the task queue
+│   └── web/                      # Frontend application Obsidian Glass UI (Placeholder)
+│       └── public/
+│           └── js/
+│               └── ads_core.js   # Placeholder for client-side advertisement logic
+├── config/
+│   └── workers/
+│       └── prometheus.yml        # Prometheus configuration for monitoring workers
 ├── data/                         # Local Volume Persistence (Cache/Sessions)
 ├── docs/                         # Architectural Blueprints (Context Files)
 ├── .dockerignore
 ├── .env.example                  # Environmental Secrets
 ├── .gitignore
-├── docker-compose.dev.yml        # "Potato Mode" Development Orchestrator
-├── gen_session.py
-├── README.md
-├── sub.txt                       # Example on-the-fly subtitle extraction output file 
-└── Survivors-Logs.md
+├── docker-compose.dev.yml        # Docker Compose file for development environment
+├── gen_session.py                # Script for generating a new session
+├── README.md                     # Main project documentation
+├── sub.txt                       # Example subtitle file
+└── Survivors-Log.md              # A log of technical challenges and their solutions
 ```
 
 ---
@@ -191,6 +193,12 @@ SHADOW-SYSTEMS (Root)
 - [x] **Stealth Operational UX:** Implemented "Silent Manager" logic where bot commands triggered in groups are acknowledged in Private DM, and trigger messages are auto-deleted upon task completion to maintain zero clutter.
 - [x] **Dynamic Engine Switching:** Automated engine labeling (Aria2 vs YT-DLP) within the Status UI based on link metadata.
 
+### 💎 Achievements (v0.7.0-beta) - Persistence & Protocol
+- [x] **Autonomous Handshake Reconstruction**: Bots now utilize "Deep Probing" via MTProto dialog sweeps to rebuild Peer AccessHashes on startup, eliminating the "Manual Message Requirement."
+- [x] **Stateful Session Checkpointing**: Implemented Graceful Shutdown (SIGTERM) logic, ensuring the SQLite WAL (Journal) is merged into the permanent `.session` file during container restarts.
+- [x] **Hybrid-Identity Node Isolation**: Implemented `WORKER_MODE` protocol. Workers now run in "Stealth-Bot" mode to protect User Identities, while the Manager utilizes "Muscle-User" mode for high-speed metadata ingestion.
+- [x] **Unified Logging Kernel**: Standardized logging format across all Python nodes, allowing for clean, time-stamped centralized debugging.
+
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -227,19 +235,24 @@ docker compose -f docker-compose.dev.yml down
 
 ## 🛠 The Hurdle Log: Challenges & Resolutions
 *The **"Shadow Survivor's Log"**. It documents every technical roadblock we encountered during Phase 1 & 2 in the Google Project IDX environment and the exact "Shadow Protocol" fixes we applied.*
-#### 🧱 Hurdle #44: The Async Heartbeat Race
-- **The Error:** `UnboundLocalError: local variable 'task_id'` or UI jumping to 100%.
-- **Description:** High-frequency updates from synchronous download threads (`yt-dlp`) were overwhelming the `asyncio` event loop, causing logs to buffer and skip.
-- **The Fix:** Decoupled the UI from the Worker threads. Engines now perform thread-safe dictionary updates to a global Registry. A separate background "Heartbeat" loop snapshots the Registry and performs throttled Telegram edits, ensuring UI stability and preventing FloodWait bans.
-
 #### 🧱 Hurdle #45: The Ghost Message Persistence
 - **The Error:** Status message remains in chat after all tasks are finished.
 - **Description:** The loop lacked logic to detect an empty registry and perform self-destruction of the status entity.
 - **The Fix:** Implemented a "Master Purge" in the worker's `finally` block and a "Lifecycle Watcher" in the `StatusManager`. The manager now detects `count == 0`, deletes the active status message, and enters a dormant state until a new task is registered.
 
+#### 🧱 Hurdle #46: The MTProto "Cold-Start" Blindness
+- **The Error:** `PeerIdInvalid` or `Handshake Fail` until a manual message was sent.
+- **Description:** Telegram MTProto clients require an `access_hash` to interact with private peers. This hash was stored in a temporary SQLite Journal (`-wal` or `-journal` files) but was lost during Docker restarts because:
+  1. The bot was force-killed (`SIGKILL`) before it could "merge" the journal into the main `.session` file.
+  2. A manual script was deleting journal files on startup, essentially wiping the bot's memory of its handshake.
+- **The Fix:** 
+  1. Implemented **Graceful Signal Handling**: The bots now listen for `SIGTERM` from Docker and call `app.stop()` explicitly, ensuring SQLite merges all pending handshake data.
+  2. Created a **Deep-Probe Handshake Protocol**: Bots now use `MessagesGetDialogs` and `get_chat` on boot to rebuild the cache internally without requiring manual human interaction.
+  3. Integrated a **Shared Peer Seeder Listener**: Every bot now listens for pulse messages to dynamically update their caches in the background.
+
 for all Hurdles check: [Survivors Log](Survivors-Log.md)
 
 ---------
 
-*Last Updated: 04-02-2026*
-*Time: 06:46pm*
+*Last Updated: 11-02-2026*
+*Time: 06:09PM*

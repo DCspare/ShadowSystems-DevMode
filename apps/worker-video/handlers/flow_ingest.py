@@ -208,37 +208,39 @@ class MediaLeecher:
         return None
 
     async def upload_progress(self, current, total):
-        if total > 0:
-            pct = int(current * 100 / total)
+        if total <= 0: return
+        pct = int(current * 100 / total)
 
-            # Calculate dynamic stats
-            speed_raw = self.upload_tracker.update(current)
-            eta_raw = self.upload_tracker.get_eta(current)
-            
-            speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
-            eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "Calculating"
+        # Calculate dynamic stats
+        speed_raw = self.upload_tracker.update(current)
+        speed_fmt = self.upload_tracker.get_formatted_speed()
+        
+        eta_raw = self.upload_tracker.get_eta(current)
+        eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
 
-            # 1. Always update Redis (for the /status command)
-            if hasattr(self, 'current_task_id') and self.current_task_id:
+        # 1. Always update Redis (for the /status command)
+        if hasattr(self, 'current_task_id') and self.current_task_id:
 
-                # 2. Update SHARED REGISTRY (For StatusManager UI)
-                async with task_dict_lock:
-                    if self.current_task_id in task_dict:
-                        task_dict[self.current_task_id].update({
-                            "progress": pct,
-                            "processed": ProgressManager.get_readable_file_size(current),
-                            "size": ProgressManager.get_readable_file_size(total),
-                            "speed": speed_fmt, 
-                            "eta": eta_fmt,
-                            "status": MirrorStatus.STATUS_UPLOAD
-                        })
+            # 2. Update SHARED REGISTRY (For StatusManager UI)
+            async with task_dict_lock:
+                if self.current_task_id in task_dict:
+                    task_dict[self.current_task_id].update({
+                        "progress": pct,
+                        "processed": ProgressManager.get_readable_file_size(current),
+                        "size": ProgressManager.get_readable_file_size(total),
+                        "speed": speed_fmt, 
+                        "eta": eta_fmt,
+                        "status": MirrorStatus.STATUS_UPLOADING
+                    })
 
                 # 3. Docker-Safe Terminal Logging (Pure Flush)
-                # Only print every 10% to prevent buffer flooding
-                if pct % 10 == 0 and pct != getattr(self, '_last_terminal_pct', -1):
-                    self._last_terminal_pct = pct
+                # Check if it's time to print to the terminal
+                now = time.time()
+                if now - getattr(self, '_last_terminal_print', 0) > 2:
+                    self._last_terminal_print = now
                     bar = ProgressManager.get_bar(pct)
-                    sys.stdout.write(f"📤 [UP] {pct}% {bar} | ID: {self.current_task_id}\n")
+                    # Use \r for a single-line progress bar
+                    sys.stdout.write(f"\r📤 [UP] {pct}% {bar} | {speed_fmt} | ETA: {eta_fmt} | ID: {self.current_task_id}")
                     sys.stdout.flush()
                     
                 # 4. MID-UPLOAD KILL SWITCH (Pyrogram Native) ---
@@ -408,6 +410,7 @@ class MediaLeecher:
             video_msg = await self.client.send_document(
                 chat_id=self.log_channel,
                 document=file_path,
+                file_name=file_name,
                 caption=clean_caption, # <--- The Professional Text
                 reply_markup=buttons,
                 force_document=True,
@@ -431,9 +434,9 @@ class MediaLeecher:
             
             # Create a rich caption for assets
             asset_caption = (
-                f"📸 **Gallery: {db_item.get('title')}**\n"
-                f"🆔 TMDB: `{tmdb_id}`\n"
-                f"📎 [Go to Main File]({msg_link})"
+                f"📸 <b>Gallery: {db_item.get('title')}</b>\n"
+                f"🆔 TMDB: <code>{tmdb_id}</code>\n"
+                f"📎 <a href='{msg_link}'>[Go to Main File]</a>"
             )
 
             # 6. Mirroring (Backup)
@@ -584,6 +587,10 @@ class MediaLeecher:
             
             logger.info(f"✅ Index Complete | Series: {bool(e_num)} (S{s_num}E{e_num})")
 
+            if self.is_cancelled:
+                logger.warning(f"🚫 Suppression: Task {task_id} was cancelled, skipping success message.")
+                return False
+
             # Final Redis Update
             if task_id and self.redis:
                 await self.redis.hset(f"task_status:{task_id}", mapping={
@@ -595,6 +602,7 @@ class MediaLeecher:
             return True
 
         except (StopTransmission, Exception) as e:
+            self.is_cancelled = True
             err_str = str(e)
 
             # 1. Handle Clean Aborts (User Cancelled)
@@ -609,8 +617,8 @@ class MediaLeecher:
                     await self.client.send_message(
                         chat_id=target_chat, # <--- REDIRECTED
                         text=(
-                            f"🛑 **Task Aborted**\n"
-                            f"🆔 ID: `{task_id}`\n"
+                            f"🛑 <b>Task Aborted</b>\n"
+                            f"🆔 ID: <code>{task_id}</code>\n"
                             f"🗑️ Status: Content scrubbed and slot released."
                         )
                     )
@@ -628,7 +636,7 @@ class MediaLeecher:
                 try:
                     await self.client.send_message(
                         chat_id=target_chat,
-                        text=f"❌ **Task Failed**\n🆔 ID: `{task_id or 'unknown'}`\nError: `{err_str[:50]}`"
+                        text=f"❌ <b>Task Failed</b>\n🆔 ID: <code>{task_id or 'unknown'}</code>\nError: <code>{err_str[:50]}</code>"
                     )
                 except: pass
                 
@@ -647,7 +655,7 @@ class MediaLeecher:
                 try:
                     await self.client.send_message(
                         chat_id=self.notify_chat,
-                        text=f"🛑 **Task Aborted**\n🆔 ID: `{task_id}`"
+                        text=f"🛑 <b>Task Aborted</b>\n🆔 ID: <code>{task_id}</code>"
                     )
                 except: pass
             else:
@@ -680,10 +688,10 @@ class MediaLeecher:
                     await self.client.send_message(
                     chat_id=int(self.notify_chat),
                     text=(
-                        f"✅ **Task Complete**\n"
-                        f"📦 `{title}`\n"
+                        f"✅ <b>Task Complete</b>\n"
+                        f"📦 <code>{branded_name}</code>\n"
                         f"👤 {self.current_user_tag}\n"
-                        f"📎 [View in Log]({link})"
+                        f"📎 <a href='{link}'>[View in Log]</a>"
                     ),
                     disable_web_page_preview=True
                 )

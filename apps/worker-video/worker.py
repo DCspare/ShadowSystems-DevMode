@@ -3,24 +3,24 @@ import os
 import sys
 import time
 import asyncio
+import signal
 import logging
 import subprocess
+import shutil 
 sys.path.append("/app/shared")
 from redis.asyncio import Redis
+from shared.tg_client import TgClient
+from shared.database import db_service
+from pyrogram.handlers import MessageHandler
 from shared.settings import settings
 from pyrogram import Client, filters
 from handlers.downloader import downloader
 from handlers.flow_ingest import MediaLeecher
 from motor.motor_asyncio import AsyncIOMotorClient
-from shared.utils import resolve_peers
 from shared.registry import task_dict, task_dict_lock, MirrorStatus
 from handlers.status_manager import StatusManager
 
-# Configure Logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+TgClient.setup_logging()
 logger = logging.getLogger("VideoWorker")
 
 class VideoWorker:
@@ -32,12 +32,18 @@ class VideoWorker:
         self.db = None
         self.redis = None
         self.leecher = None
-        self.resolved_peers = set()
-        # Identity via Env Var (e.g. video_1) or fallback
-        self.worker_id = os.getenv("WORKER_ID", "worker_1")
-        # Ensure log_channel is int
+        self.is_running = True
+        self.shutdown_event = asyncio.Event()
+
+        # 🔑 DYNAMIC SESSION NAME
+        # Defaults to 'worker_video_default' if SESSION_FILE is missing in .env
+        self.session_name = os.getenv("SESSION_FILE", "worker_video_default")
+        self.mode = os.getenv("WORKER_MODE", "BOT").upper()
+        
+        logger.info(f"🆔 Node Initialized | Mode: {self.mode} | Session: {self.session_name}")
+
         try:
-            self.log_channel = int(os.getenv("TG_LOG_CHANNEL_ID"))
+            self.log_channel = int(settings.TG_LOG_CHANNEL_ID)
         except:
             self.log_channel = 0
 
@@ -76,12 +82,15 @@ class VideoWorker:
                 "--rpc-listen-all=false", 
                 "--rpc-allow-origin-all",
                 f"--dir={dl_path}",
-                
-                # CRITICAL FIXES FOR ERR 16 / ABORT
-                "--file-allocation=none",       # Stop pre-allocating disk space (Fixes Docker Error)
-                "--disk-cache=0",               # Disable RAM caching (Prevent buffer lag)
-                "--max-connection-per-server=4",# Keep connections low to avoid Google/Host blocks
+                "--file-allocation=none", # Stop pre-allocating disk space (Fixes Docker Error)
+                "--disk-cache=0", # Disable RAM caching (Prevent buffer lag)
+                "--max-connection-per-server=4",    # Keep connections low to avoid Google/Host blocks
                 "--min-split-size=10M",
+                "--dht-listen-port=6881",
+                "--listen-port=6881",
+                "--bt-enable-lpd=true",  # Local Peer Discovery
+                "--enable-dht=true",
+                "--user-agent=Transmission/3.00", # Sometimes masks bot traffic
                 "--quiet"
             ]
             self.aria2_proc = subprocess.Popen(command)
@@ -101,125 +110,86 @@ class VideoWorker:
         self.clean_slate()
         
         # 1. DB (Persistence Layer)
+        await db_service.connect() # Ensure kernel DB is connected for Shared Registry
         mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
         self.db = mongo_client["shadow_systems"]
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-        # 2. Telegram Identity
-        logger.info("Initializing Pyrogram Client...")
-        is_bot_mode = os.getenv("WORKER_MODE", "BOT") == "BOT"
-
-        session_name = os.getenv("SESSION_FILE", "worker_default")
-
-        client_args = {
-            "api_id": settings.TG_API_ID,
-            "api_hash": settings.TG_API_HASH,
-            "workdir": "/app/sessions",
-            "sleep_threshold": 60,               # MLTB Standard: Wait 60s max for flood
-            "max_concurrent_transmissions": 10,  # MLTB Standard: 10 parallel chunks
-        }
-        
-        if is_bot_mode:
-            logger.info(f"🤖 Bot Mode Active: {session_name}")
-            self.app = Client(
-                name="worker_bot",
-                bot_token=settings.TG_WORKER_BOT_TOKEN,
-                **client_args 
-            )
-        else:
-            logger.info(f"⚡ User Session Mode Active: {session_name}")
-            self.app = Client(
-                name=session_name,
-                session_string=settings.TG_SESSION_STRING, # Support for Session String
-                **client_args
-            )
-
-        # MLTB Performance Tuning: Cache increase
-        self.app.max_message_cache_size = 15000
-        
-        # 3. Initialize Leecher
-        self.leecher = MediaLeecher(self.app, self.db, self.redis)
-
-        # 4. Initialize Downloader with THE BRIDGE
+        # Initialize Downloader with THE BRIDGE
         self.start_aria2_daemon()
         await downloader.initialize(
             redis=self.redis
         )
 
-        # --- UX POLISH: Peer Discovery Listener ---
-        @self.app.on_message()
-        async def auto_resolve_handler(client, message):
-            target_ids = [settings.TG_LOG_CHANNEL_ID, settings.TG_BACKUP_CHANNEL_ID]
-            if message.chat.id in target_ids:
-                if message.chat.id not in self.resolved_peers:
-                    self.resolved_peers.add(message.chat.id)
-                    logger.info(f"🛰️ [Peer Discovery]: {message.chat.title} ({message.chat.id}) - Access Hash Cached.")
+        # 1. Start Primary Identity (1st Priority)
+        started = await TgClient.start_bot(
+            name=self.session_name, 
+            token_override=settings.TG_WORKER_BOT_TOKEN
+        )
 
-        # 5. Start App and resolve peer 
-        await self.app.start()
-        self.app.start_time = time.time() # For Uptime check
-        logger.info(f"Worker fully operational as @{(await self.app.get_me()).username}")
+        # 2. Try User (Fallback start_user)
+        await TgClient.start_user()     # For high-speed user transfers
 
-        # 6. ✅ Official Shadow-Handshake (No more /health)
-        await resolve_peers(self.app, [
-            settings.TG_LOG_CHANNEL_ID, 
-            settings.TG_BACKUP_CHANNEL_ID
-        ])
+        if not started and not TgClient.user:
+            logger.critical("❌ No valid identity found (Bot or User). Exiting.")
+            sys.exit(1)
 
-        # 7. Start Status Manager Heartbeat
+        await TgClient.start_helpers()  # Spin up the HELPER_TOKENS
+
+        # 3. Dynamic Handler Assignment
+        # If in BOT mode, we use the Bot. If USER mode, and it worked, use User.
+        self.app = await TgClient.get_client()
+        self.leecher = MediaLeecher(self.app, self.db, self.redis)
+
+        # 4. Handshake Pulse
+        await TgClient.send_startup_pulse(f"WORKER-{self.session_name.upper()}") # 🛰️ Visible Handshake check
+
+        await asyncio.sleep(2) 
+
+        # 5. Start Status Manager Heartbeat
         self.status_mgr = StatusManager(self.app)
         asyncio.create_task(self.status_mgr.update_heartbeat()) # Background Loop
+        
+    async def stop_services(self):
+        """🛑 GRACEFUL SHUTDOWN ROUTINE"""
+        if not self.is_running:
+            return
 
-        # # ---------------------------------------------
-        # # 6. MANUAL HEALTH CHECK COMMAND
-        # # ---------------------------------------------
-        # @self.app.on_message(filters.command("health"))
-        # async def health_check(client, message):
-        #     """Manual trigger to verify bot is alive and caching works"""
-        #     # Collect Stats
-        #     uptime = "Online"
-        #     mode = "BOT MODE" if is_bot_mode else "USER MODE"
-            
-        #     chat_info = f"{message.chat.title} (`{message.chat.id}`)"
-
-        #     # Send simpler format to ensure rendering
-        #     await message.reply_text(
-        #       f"🤖 **Shadow Worker Status**\n\n"
-        #       f"🆔 **Worker:** `{self.worker_id}`\n"
-        #       f"🛡️ **Mode:** {mode}\n"
-        #       f"📡 **Connected Peer:** {chat_info}\n\n"
-        #       f"✅ **System Ready.**"
-        #      )
-        #      # FORCE CACHE UPDATE
-        #     # self.log_channel = message.chat.id
-        # #     logger.info(f"Health Check successful. Session validated: {message.chat.title}")
-
-        # # 7.. Safe Peer Resolution
-        # # We try to get_chat. If it fails, we rely on the manual /health command 
-        # # to "Wake up" the caching layer later.
-        # try:
-        #     logger.info(f"�� Probing Channel {self.log_channel}...")
-        #     chat = await self.app.get_chat(self.log_channel)
-        #     logger.info(f"✅ Connection Established: {chat.title}")
-            
-        #     # Send Startup Signal
-        #     await self.app.send_message(
-        #         self.log_channel, 
-        #         f"🔄 **Worker Restarted**\nready as: {self.worker_id}"
-        #     )
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Automatic Handshake failed: {e}")
-        #     logger.warning("👉 ACTION: Send '/health' in the Log Channel/Group to fix cache!")
-
+        logger.info("🛑 Shutdown Signal Received. Cleaning up...")
+        self.is_running = False
+        
+        # 1. Kill Aria2
+        if hasattr(self, 'aria2_proc'):
+            try:
+                self.aria2_proc.terminate()
+                self.aria2_proc.wait(timeout=5)
+            except Exception:
+                self.aria2_proc.kill()
+        
+        # 2. Stop Pyrogram (THIS SAVES THE HANDSHAKE)
+        try:
+            logger.info("⏳ Saving Pyrogram Session (merging journal)...")
+            await TgClient.stop()
+            logger.info("✅ Pyrogram Session Saved & Closed.")
+        except Exception as e:
+            logger.error(f"Error during TgClient shutdown: {e}")
 
     async def task_watcher(self):
         """Watch Redis"""
         logger.info("Task Watcher started. Listening to 'queue:leech'...")
-        while True:
+        while self.is_running:
+            # 1. DEFENSIVE INITIALIZATION (Fixes UnboundLocalError)
             task_id = None
+            tmdb_id = None
+            user_id = "0"
+            origin_chat_id = settings.TG_LOG_CHANNEL_ID
+            trigger_msg_id = None
+            user_tag = "User"
             try:
-                task = await self.redis.brpop("queue:leech", timeout=30)
-                if not task: continue
+                task = await self.redis.brpop("queue:leech", timeout=1) 
+                if not task: 
+                    continue # This allows the loop to check 'is_running' every 1 second
+
                 if task:
                     payload = task[1]
                     logger.info(f"Consumed task: {payload}")
@@ -319,12 +289,45 @@ class VideoWorker:
                         else:
                             logger.error("Download ghosted.")
 
-                    except Exception as e:
-                        logger.error(f"Task Payload Error: {e}")
-                        await asyncio.sleep(2)
+                    except Exception as task_err:
+                        logger.error(f"❌ Task {task_id} Failed: {task_err}")
 
+                        # 🛠️ SYSTEMATIC FAILURE CLEANUP
+                        if self.redis:
+                            # 1. Update status to Failed in Redis
+                            await self.redis.hset(f"task_status:{task_id}", "status", "failed")
+                            # 2. Force expire the status so it clears from /status later
+                            await self.redis.expire(f"task_status:{task_id}", 300)
+                            # 3. IMPORTANT: Release the User's slot so they aren't blocked!
+                            if user_id != "0":
+                                limit_key = f"active_user_tasks:{user_id}"
+                                await self.redis.srem(limit_key, task_id)
+                                logger.info(f"🔓 Emergency Slot Release for {user_tag}")
+                        
+                        # ✅ Send a notification to the user about the failure
+                        try:
+                            error_message = str(task_err).replace('<', '').replace('>', '') # Sanitize
+                            await self.app.send_message(
+                                chat_id=int(origin_chat_id),
+                                text=(
+                                    f"❌ <b>Task Failed for {user_tag}</b>\n\n"
+                                    f"<b>Task ID:</b> <code>{task_id}</code>\n"
+                                    f"<b>Reason:</b> <pre>{error_message[:250]}</pre>\n\n"
+                                    f"The queue has been cleared and your slot has been released."
+                                )
+                            )
+                        except Exception as notify_err:
+                            logger.error(f"Failed to send failure notification: {notify_err}")
+
+                        await asyncio.sleep(2)
+                        continue # Move to the next task in queue
+
+            except asyncio.CancelledError:
+                # 🛠️ CRITICAL: Don't catch this as an "error". Raise it to exit the loop.
+                raise 
             except Exception as e:
-                logger.error(f"Loop Error: {e}")
+                # Catch actual errors (Redis timeout, malformed data, etc)
+                logger.error(f"Watcher Loop Error: {e}")
                 await asyncio.sleep(2)
 
             finally:
@@ -336,12 +339,53 @@ class VideoWorker:
 
 async def main():
     worker = VideoWorker()
+
+    # 🟢 SETUP SIGNAL HANDLERS
+    loop = asyncio.get_running_loop()
+
+    # Define what happens when Docker sends SIGTERM
+    def handle_stop():
+        # Using a sync threadsafe call to ensure event loop wakes up
+        loop.call_soon_threadsafe(worker.shutdown_event.set)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_stop)
+
     try:
         await worker.init_services()
-        await worker.task_watcher()
-    except KeyboardInterrupt:
-        if hasattr(worker, 'aria2_proc'):
-            worker.aria2_proc.terminate()
+
+        # Run watcher and wait for shutdown signal
+        watcher_task = asyncio.create_task(worker.task_watcher())
+
+        # Wait here until signal is received
+        await worker.shutdown_event.wait()
+        logger.warning("🏁 Shutdown sequence initiated...")
+
+        # # Signal received, wait for watcher to finish current cycle if needed
+        # # (Optional: cancel watcher if you want instant kill)
+        # watcher_task.cancel()
+
+    except Exception as e:
+        logger.error(f"Fatal Startup Error: {e}")
+    finally:
+        # 🛠️ SYSTEMATIC TEARDOWN
+        logger.info("📦 Beginning Systematic Teardown...")
+        
+        # A. Stop Watcher
+        if 'watcher_task' in locals():
+            watcher_task.cancel()
+            try:
+                await asyncio.wait_for(watcher_task, timeout=5)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        # B. Run the shutdown routine (SQLite save)
+        await worker.stop_services()
+        
+        # C. Flush all logs and end
+        logger.info("💀 Shadow Worker Offline.")
+        # Ensure we exit even if background loops are hung
+        sys.exit(0)
 
 if __name__ == "__main__":
     asyncio.run(main())

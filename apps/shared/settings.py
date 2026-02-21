@@ -81,6 +81,18 @@ class AppSettings(BaseSettings):
     MAX_TOTAL_TASKS: int = 10
     STATUS_UPDATE_INTERVAL: int = 6 # Seconds
 
+    # --- HANDSHAKE & PERSISTENCE ---
+    # Default is True for Cloud IDEs (Dev), set to False in Production for .session files
+    USE_IN_MEMORY_SESSION: bool = True  
+
+    # Swarm/Handshake config (From WZML logic)
+    HELPER_TOKENS: Optional[str] = None # Format: "token1 token2 token3"
+    DOWNLOAD_DIR: str = "/app/downloads"
+    
+    # Mirror specific logic
+    IS_PREMIUM_USER: bool = False
+    MAX_SPLIT_SIZE: int = 2097152000 # 2GB
+
     # ==========================================
     # 🎥 3RD PARTY INTEGRATIONS
     # ==========================================

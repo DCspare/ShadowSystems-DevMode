@@ -31,71 +31,64 @@ class Downloader:
         except Exception:
             self.aria2 = None
 
-    async def _update_status(self, pct, downloaded, total, speed, eta):
+    async def _update_status(self, pct, downloaded, total, speed, eta, task_id):
         """Helper to safely write to the global task dictionary."""
         async with task_dict_lock:
-            if self.current_task_id in task_dict:
-                task_dict[self.current_task_id].update({
+            if task_id in task_dict:
+                task_dict[task_id].update({
                     "progress": pct,
                     "processed": ProgressManager.get_readable_file_size(downloaded),
                     "size": ProgressManager.get_readable_file_size(total),
                     "speed": speed,
                     "eta": eta,
-                    "status": MirrorStatus.STATUS_DOWNLOAD
+                    "status": MirrorStatus.STATUS_DOWNLOADING 
                 })
 
-    def _native_logger_progress(self, d):
+    def _get_native_progress_hook(self, task_id):
         """Reports data to the Shared Registry for StatusManager to display."""
-        if d['status'] == 'downloading':
-            try:
-                # Capture current state into class attributes
-                # This allows worker.py to read progress without freezing yt-dlp
-                downloaded = d.get('downloaded_bytes', 0)
-                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                if total <= 0: return
+        # Stores state locally for this specific download instead of globally on `self`
+        state = {"tracker": None, "last_pct": -1} 
+
+        def _hook(d):
+            if d.get('status') == 'downloading':
+                try:
+                    downloaded = d.get('downloaded_bytes', 0)
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                    if total <= 0: return
+                    
+                    if state["tracker"] is None:
+                        from shared.progress import TaskProgress
+                        state["tracker"] = TaskProgress(total)
+                        
+                    tracker = state["tracker"]
+                    speed_raw = tracker.update(downloaded)
+                    # Ensure progress.py has get_formatted_speed() or use human_size
+                    speed_fmt = tracker.get_formatted_speed() 
+                    eta_raw = tracker.get_eta(downloaded)
+                    eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
+                    pct = int(downloaded * 100 / total)
+                            
+                    # ✅ Thread-safe dict update using the isolated task_id
+                    if task_id in task_dict:
+                        task_dict[task_id].update({
+                            "progress": pct,
+                            "processed": ProgressManager.get_readable_file_size(downloaded),
+                            "size": ProgressManager.get_readable_file_size(total),
+                            "speed": speed_fmt,
+                            "eta": eta_fmt,
+                            "status": MirrorStatus.STATUS_DOWNLOADING 
+                        })
+
+                    # Terminal Output formatting fixed to prevent console spam
+                    if pct % 5 == 0 and pct != state["last_pct"]:
+                        state["last_pct"] = pct
+                        print(f"\r⬇️ [DL] {pct}% | {speed_fmt} | ETA: {eta_fmt}", end="", flush=True)
+                except Exception as e:
+                    logger.error(f"Hook Error: {e}")
+            elif d == 'finished':
+                print(f"\n✅ Download Phase Complete.\n", flush=True)
                 
-                if not self.tracker:
-                    from shared.progress import TaskProgress
-                    self.tracker = TaskProgress(total)
-
-                    # ✅ SYNC-SAFE REGISTRY UPDATE
-                    # We update the dictionary so the StatusManager Heartbeat can see it
-                    task_id = self.current_task_id
-                    
-                speed_raw = self.tracker.update(downloaded)
-                eta_raw = self.tracker.get_eta(downloaded)
-                pct = int(downloaded * 100 / total)
-                    
-                speed_fmt = ProgressManager.get_readable_file_size(speed_raw) + "/s"
-                eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
-                        
-                # ✅ USE THREAD-SAFE DICTIONARY UPDATE
-                # Instead of run_coroutine_threadsafe, we update the dict directly
-                # Python dict updates are thread-safe in CPython for this use case
-                if self.current_task_id in task_dict:
-                    task_dict[self.current_task_id].update({
-                        "progress": pct,
-                        "processed": ProgressManager.get_readable_file_size(downloaded),
-                        "size": ProgressManager.get_readable_file_size(total),
-                        "speed": speed_fmt,
-                        "eta": eta_fmt,
-                        "status": MirrorStatus.STATUS_DOWNLOAD
-                    })
-
-                # Terminal (Every 10%)
-                if pct % 10 == 0 and pct != getattr(self, '_last_print_pct', -1):
-                    self._last_print_pct = pct
-                    sys.stdout.write(f"⬇️ [DL] {pct}% | {speed_fmt} | ETA: {eta_fmt}\n")
-                    sys.stdout.flush()
-                        
-                # Check Kill Signal
-                if self.redis:
-                    # Sync check in thread
-                    pass 
-            except Exception: pass
-        elif d['status'] == 'finished':
-            sys.stdout.write(f"✅ [DL] Download Phase Complete. Finalizing...\n") 
-            sys.stdout.flush()
+        return _hook
 
     def _get_safe_filename(self, candidate, default="video"):
         """Prevents Errno 36 (Filename too long)"""
@@ -147,18 +140,18 @@ class Downloader:
             return {"url": url, "filename": safe_name, "type": "raw"}
 
     async def start_download(self, target: dict, task_id: str = None) -> str:
-        self.current_task_id = task_id
-        self.current_pct = 0 # Initialize for worker to read
-        self._last_pct = -1 # Reset for new file
-        self.tracker = None # We assume size is 0 and update it once yt-dlp starts
-        raw_link = target['url']
+        # ✅ FIX: Removed unsafe self.current_task_id and self.tracker assignments here
+        raw_link = target.get('url') 
+        if not raw_link:
+            raise ValueError("Target dictionary is missing the 'url' key.")
+
         fname = self._get_safe_filename(target.get('filename'), "video.mp4")
         final_path = os.path.join(self.download_path, fname)
 
         async with task_dict_lock:
             if task_id in task_dict:
                 task_dict[task_id].update({
-                    "status": MirrorStatus.STATUS_DOWNLOAD,
+                    "status": MirrorStatus.STATUS_DOWNLOADING, # ✅ FIX: Typo Corrected
                     "eta": "Probing..."
                 })
 
@@ -179,7 +172,7 @@ class Downloader:
                 'format': 'bestvideo+bestaudio/best', # Allow merging
                 'outtmpl': f"{self.download_path}/%(title)s.%(ext)s",
                 'nocheckcertificate': True,
-                'progress_hooks': [self._native_logger_progress],
+                'progress_hooks': [self._get_native_progress_hook(task_id)],
                 'quiet': True, 
                 'no_warnings': True,
                 # Ensure it sees the cookie file mapped in Docker
@@ -193,7 +186,7 @@ class Downloader:
                 ydl_opts['outtmpl'] = final_path
 
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, lambda: self._native_run(raw_link, ydl_opts))
+            await loop.run_in_executor(None, self._native_run, raw_link, ydl_opts)
             
             # Locate file (handle edge cases where yt-dlp changes extension)
             if os.path.exists(final_path): return final_path
@@ -216,7 +209,7 @@ class Downloader:
 
     async def download_with_aria2(self, raw_link, task_id):
         if not self.aria2: await self.initialize()
-        logger.info("🧲 Sending Magnet to Aria2 Daemon...")
+        logger.info(f"🧲 Handshaking with Aria2 for task {task_id}...")
 
         try:
             # Added aria2 options to disable seeding and force save
@@ -224,12 +217,25 @@ class Downloader:
                 'dir': self.download_path,
                 'seed-time': '0' # Stops seeding immediately after download finishes
             }
-             # 1. Add Magnet
-            gid = self.aria2.add_uris([raw_link], options={'dir': self.download_path}).gid
-            logger.info(f"🧲 Aria2: Started {task_id} (GID: {gid})")
+            # 1. Add Magnet
+            try:
+                download = self.aria2.add_uris([raw_link], options=options)
+                gid = download.gid
+            except Exception as e:
+                if "already registered" in str(e).lower():
+                    # Self-Healing: If already exists, find it and track it instead of failing
+                    logger.warning("🧲 InfoHash exists. Attaching to existing stream...")
+                    # Extract info-hash from magnet if possible or just check active downloads
+                    for dl in self.aria2.get_downloads():
+                        # We try to match by URI or InfoHash logic
+                        # Simplified: find the first one with the same status
+                        if dl.status in ['active', 'waiting', 'paused']:
+                             gid = dl.gid
+                             break
+                    else: raise e # Re-raise if we can't find it
+                else: raise e
 
-            # Use raw GID to fetch fresh objects each time
-            download = self.aria2.get_download(gid)
+            logger.info(f"🧲 Aria2: Tracking GID {gid}")
 
             # Initial placeholder
             print("⏳ Initializing Aria2 stream...", flush=True)
@@ -237,63 +243,92 @@ class Downloader:
             # 2. Tracking Loop
             while True:
                 try:
+                # RE-FETCH every time to ensure we have an OBJECT, not a string
                     download = self.aria2.get_download(gid)
-                except aria2p.client.ClientException:
-                    # Handle race condition where file finishes and is removed quickly
-                    break 
+                except Exception:
+                    break # Usually means it finished and was removed 
                 
-                # Check for Metadata Handoff 
+                # A. Handle Metadata -> Torrent Handover
                 if download.followed_by:
-                    # behavior: aria2p returns ID strings or objects depending on version
-                    # We treat it defensively
-                    next_dl = download.followed_by[0]
-                    new_gid = next_dl.gid if hasattr(next_dl, 'gid') else next_dl 
-                    print(f"\n🧲 Metadata Retrieved Handover: {gid} -> {new_gid}", flush=True)
-                    # logger.info(f"🧲 Metadata Retrieved Handover: {gid} -> {new_gid}")
-                    gid = new_gid # Switch our tracking target ID
-                    continue # Restart loop with new GID
+                    # In metadata mode, 'followed_by' is a list of NEW GID strings
+                    new_item = download.followed_by[0]
+                    gid = new_item.gid if not isinstance(new_item, str) else new_item
+                    logger.info(f"🧲 Metadata phase complete. Switching to File GID: {gid}")
+                    # Force update dictionary status
+                    async with task_dict_lock:
+                        if task_id in task_dict:
+                            task_dict[task_id].update({"eta": "Starting file..."})
+                    continue 
 
-                # ERROR Handling
-                if download.status == 'error':
-                    print("") # Clear line
-                    raise Exception(f"Aria2 Error {download.error_code}: {download.error_message}")
-                
-                # Enhanced completion check (Check Length OR Status)
+                # B. Handle Completion or Errors (Check Length OR Status)
                 if download.is_complete or \
                    download.status == 'complete' or \
                    (download.total_length > 0 and download.completed_length >= download.total_length):
                     print("\n✅ Download Complete.") # Newline to finalize the bar
-                    # logger.info("✅ 🧲 Download Complete. Processing...")
+                    logger.info(f"✅ Aria2 Download Finished: {gid}")
                     break
-                    
-                 # LIVE PROGRESS BAR
-                if download.total_length > 0:
-                    pct = int(download.completed_length * 100 / download.total_length)
-                    
-                    # Create a visual bar [█████------]
-                    bar_len = 25 
-                    filled_len = int(bar_len * pct // 100)
-                    bar = '█' * filled_len + '-' * (bar_len - filled_len)
-                    
-                    # \r = return to start of line, end='' = don't add new line
-                    msg = f"\r🧲 [{bar}] {pct}% | ⚡ {download.download_speed_string()} | 📦 {download.total_length_string()}"
-                    print(msg, end='', flush=True)
 
-                # --- KILL SWITCH (MID-MAGNET) ---
+                # ERROR Handling
+                if download.status == 'error':
+                    err_msg = download.error_message or "Unknown Aria2 Error"
+                    raise Exception(f"Aria2 Error: {err_msg}")
+                                    
+                # C. LIVE PROGRESS & PEER DISCOVERY LOGGING
+                downloaded = download.completed_length
+                total = download.total_length
+                peers = getattr(download, 'connections', 0)
+                speed = download.download_speed_string()
+
+                if total > 0:
+                    # --- ACTUAL FILE DOWNLOAD PHASE ---
+                    pct = int(downloaded * 100 / total)
+                    speed_fmt = download.download_speed_string()
+                    eta_fmt = download.eta_string()
+
+                    # Update Registry for /status UI
+                    async with task_dict_lock:
+                        if task_id in task_dict:
+                            task_dict[task_id].update({
+                                "progress": pct,
+                                "processed": download.completed_length_string(),
+                                "size": download.total_length_string(),
+                                "speed": f"{speed_fmt}/s",
+                                "eta": eta_fmt,
+                                "status": MirrorStatus.STATUS_DOWNLOADING
+                            })
+
+                    # Terminal Output
+                    if pct % 10 == 0:
+                        print(f"\r🧲 [ARIA2] {pct}% | Speed: {speed_fmt} | ETA: {eta_fmt} | Peers: {peers}", end="", flush=True)
+                
+                else:
+                    # --- METADATA / PEER DISCOVERY PHASE ---
+                    # Update status message so UI/Logs don't look frozen
+                    async with task_dict_lock:
+                        if task_id in task_dict:
+                            task_dict[task_id].update({
+                                "status": MirrorStatus.STATUS_DOWNLOADING,
+                                "speed": f"0B/s",
+                                "eta": f"Conns: {peers} (Waiting for Metadata...)"
+                            })
+                    print(f"\r📡 [SEEDERS] Found: {peers} | Looking for metadata...", end="", flush=True)
+
+                # D. KILL SWITCH Check (MID-MAGNET)
                 if task_id and self.redis:
-                    if await self.redis.get(f"kill_signal:{task_id}"):
-                        self.aria2.remove([gid], force=True, clean=True)
-                        raise Exception("ABORTED_BY_SIGNAL")
+                    kill = await self.redis.get(f"kill_signal:{task_id}")
+                    if kill:
+                        logger.warning(f"🛑 Kill signal received for Aria2: {gid}")
+                        try: self.aria2.remove([gid], force=True, clean=True)
+                        except: pass
+                        raise Exception("TASK_CANCELLED_BY_USER")
                 
                 # Faster refresh rate for smooth UI
                 await asyncio.sleep(2)
 
             # 3. Resolve File Path
             # Refetch one last time to get the final list on disk
-            try:
-                download = self.aria2.get_download(gid)
-            except:
-                pass # Proceed, assuming files are on disk if loop broke
+            # Refetch to ensure we have the final file list
+            download = self.aria2.get_download(gid)
             
             # Torrents often contain multiple files. We pick the largest video.
             largest_file = None
@@ -318,7 +353,7 @@ class Downloader:
 
             # Cleanup Aria2 list (Optional but good practice)
             try:
-                self.aria2.remove([gid])
+                self.aria2.remove([gid], force=True, clean=True)
             except: 
                 pass
                  

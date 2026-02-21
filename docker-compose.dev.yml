@@ -1,15 +1,14 @@
-version: "3.8"
-
 services:
   # --- 1. THE BRAIN (Manager API) ---
   manager:
     build: ./apps/manager
     container_name: sv-manager-dev
     restart: unless-stopped
-    environment: 
-       - DOMAIN_NAME=${CODESPACE_NAME}-80.app.github.dev # Keep this for IDX dynamic URL logic
-       # Do NOT list MODE here. Let it load from env_file below.
     env_file: .env
+    environment: 
+       - DOMAIN_NAME=${DOMAIN_NAME} # Keep this for IDX dynamic URL logic
+       - WORKER_MODE=BOT            # 👤 Manager uses the User Identity for muscle (USER vs BOT)
+       - SESSION_FILE=manager       # .session file name in ./data/sessions
     volumes:
       - ./apps/manager:/app
       - ./apps/shared:/app/shared
@@ -35,8 +34,8 @@ services:
       - SECURE_LINK_SECRET=${SECURE_LINK_SECRET} # Pulls from your .env
     volumes:
       - ./data/cache:/var/cache/nginx/streamvault
-    # depends_on:
-    #   - manager
+    depends_on:
+      - manager
     logging:
         driver: "json-file"
         options:
@@ -49,16 +48,18 @@ services:
   worker-video:
     build: ./apps/worker-video
     container_name: sv-worker-video-dev
-    environment:
-      - WORKER_ID=video_1
-      - SESSION_FILE=worker_video_1
     env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_MODE=BOT         # 🤖 Worker stays as Bot only
+      - SESSION_FILE=leech_1    # .session file name in ./data/sessions
     volumes:
       - ./apps/worker-video:/app
       - ./apps/shared:/app/shared
       - ./data/sessions:/app/sessions # Shared session mount
-    # depends_on:
-    #   - manager
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - manager
     logging:
         driver: "json-file"
         options:
@@ -80,19 +81,19 @@ services:
   #   networks:
   #     - sv-internal
 
-  # --- 5. THE ENGINE (The Muscle) ---
+  # --- 5. THE ENGINE (The GO Stream) ---
   stream-engine:
     build: ./apps/stream-engine
     container_name: sv-stream-engine-dev
+    env_file: .env
     environment:
       - TG_API_ID=${TG_API_ID}
       - TG_API_HASH=${TG_API_HASH}
-      - TG_BOT_TOKEN=${TG_BOT_TOKEN}           # Fallback
-      - TG_SESSION_STRING=${TG_SESSION_STRING} # <--- NEW: The Userbot Login Key
+      - TG_STREAM_BOT_TOKEN=${TG_STREAM_BOT_TOKEN} # Priority
+      - TG_SESSION_STRING=${TG_SESSION_STRING} # Fallback
     volumes:
-      # This stores the "Brain" (Peer/Channel Cache) so it doesn't forget hashes
-      - ./data/sessions:/app/sessions 
-    env_file: .env
+      - ./data/sessions:/app/sessions # Shared session mount
+      - /var/run/docker.sock:/var/run/docker.sock 
     expose:
       - 8000
     logging:

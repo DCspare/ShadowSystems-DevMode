@@ -158,21 +158,21 @@ class MessageFormatter:
         # Logic: If no Episode line, omit that row.
 
         layout = f"""
-**TASK #{tmdb_id} COMPLETE**
+<b>TASK #{tmdb_id} COMPLETE</b>
 
-**NAME:** `📁 {title} [{year}]`
-{f"**{episode_line}**" if episode_line else ""}
+<b>NAME:</b> 📁 <code>{title} [{year}]</code>
+{f"<b>{episode_line}</b>" if episode_line else ""}
 
-┌ 💿 **Res:** #{res_str}
-├ 🔊 **Audio:** `{audio_text}`
-├ 📝 **Subtitles:** `{sub_text}`
-├ 💾 **Size:** `{self.human_size(meta.get('size_bytes', 0))}`
-├ ⏳ **Duration:** `{self.format_duration(meta.get('duration', 0))}`
-├ ⭐ **Rating:** `{rating}/10`
-└ 🎭 **Genre:** `{genres}`
+┌ 💿 <b>Res:</b> #{res_str}
+├ 🔊 <b>Audio:</b> <code>{audio_text}</code>
+├ 📝 <b>Subtitles:</b> <code>{sub_text}</code>
+├ 💾 <b>Size:</b> <code>{self.human_size(meta.get('size_bytes', 0))}</code>
+├ ⏳ <b>Duration:</b> <code>{self.format_duration(meta.get('duration', 0))}</code>
+├ ⭐ <b>Rating:</b> <code>{rating}/10</code>
+└ 🎭 <b>Genre:</b> <i>{genres}</i>
 
-👇 **PREVIEW ASSETS**
-*(Screenshots & Sample attached below)*
+👇 <b>PREVIEW ASSETS</b>
+<i>(Screenshots & Sample attached below)</i>
 
 #ShadowSystems #{media_type.title()}
 """
