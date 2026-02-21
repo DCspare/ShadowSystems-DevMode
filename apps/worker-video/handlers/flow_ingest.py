@@ -209,39 +209,25 @@ class MediaLeecher:
 
     async def upload_progress(self, current, total):
         if total <= 0: return
-        pct = int(current * 100 / total)
-
-        # Calculate dynamic stats
-        speed_raw = self.upload_tracker.update(current)
-        speed_fmt = self.upload_tracker.get_formatted_speed()
-        
-        eta_raw = self.upload_tracker.get_eta(current)
-        eta_fmt = ProgressManager.get_readable_time(int(eta_raw)) if isinstance(eta_raw, (int, float)) else "..."
 
         # 1. Always update Redis (for the /status command)
         if hasattr(self, 'current_task_id') and self.current_task_id:
 
             # 2. Update SHARED REGISTRY (For StatusManager UI)
             async with task_dict_lock:
-                if self.current_task_id in task_dict:
-                    task_dict[self.current_task_id].update({
-                        "progress": pct,
-                        "processed": ProgressManager.get_readable_file_size(current),
-                        "size": ProgressManager.get_readable_file_size(total),
-                        "speed": speed_fmt, 
-                        "eta": eta_fmt,
-                        "status": MirrorStatus.STATUS_UPLOADING
-                    })
-
-                # 3. Docker-Safe Terminal Logging (Pure Flush)
-                # Check if it's time to print to the terminal
-                now = time.time()
-                if now - getattr(self, '_last_terminal_print', 0) > 2:
-                    self._last_terminal_print = now
-                    bar = ProgressManager.get_bar(pct)
-                    # Use \r for a single-line progress bar
-                    sys.stdout.write(f"\r📤 [UP] {pct}% {bar} | {speed_fmt} | ETA: {eta_fmt} | ID: {self.current_task_id}")
-                    sys.stdout.flush()
+                task = task_dict.get(self.current_task_id)
+                if task:
+                    task.update_progress(current, total, status=MirrorStatus.STATUS_UPLOADING)
+                    
+                    # Lightweight Terminal Heartbeat (Every 10%)
+                    # This works perfectly in Docker/Cloud logs
+                    pct = task.progress
+                    # Only print if we hit a new 10% milestone
+                    if pct % 10 == 0 and pct != getattr(self, '_last_terminal_pct', -1):
+                        self._last_terminal_pct = pct # Update the latch
+                        ui = task.get_ui_dict()
+                        # Use logger.info instead of sys.stdout.write for clean Docker logs
+                        logger.info(f"📤 [UPLOAD] {pct}% | {ui['speed']} | ETA: {ui['eta']} | ID: {self.current_task_id}")
                     
                 # 4. MID-UPLOAD KILL SWITCH (Pyrogram Native) ---
                 kill_check = await self.redis.get(f"kill_signal:{self.current_task_id}")
@@ -339,11 +325,8 @@ class MediaLeecher:
             db_title = db_item.get('title')
             ptn_title = ptn.get('title')
             
-            # Logic: If current filename is a "safe/truncated" name, ignore PTN and use DB
-            if "truncated" in file_name.lower() or "direct" in file_name.lower() or not ptn_title:
-                best_title = db_title or "Video"
-            else:
-                best_title = ptn_title
+            # Priority: 1. TMDB Title, 2. Filename Title, 3. "Video"
+            best_title = db_item.get('title') or ptn.get('title') or "Video"
                 
             # 2. Sanitize for Filesystem (Dots instead of spaces)
             safe_title = best_title.replace(' ', '.')

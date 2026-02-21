@@ -26,7 +26,7 @@ async def leech_command(client, message):
         # 1. URL
         parts = text.split(" ", 2)
         if len(parts) < 2: 
-            return await message.reply_text("❌ Usage: <b>/leech [URL] [TMDB_ID] [type] [name]</code>")
+            return await message.reply_text("<b>❌ Usage:</b> <code>/leech [URL] [TMDB_ID] [type] [name]</code>")
         url = parts[1]
         
         # Default Params

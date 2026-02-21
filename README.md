@@ -61,16 +61,21 @@ SHADOW-SYSTEMS (Root)
 │   │   ├── go.mod                # Declares the Go module's path and dependencies
 │   │   ├── go.sum                # Contains the checksums of the Go module dependencies
 │   │   └── main.go               # Main entrypoint for the Go HTTP server that handles streaming
-│   ├── worker-video/             # Celery worker for video processing tasks
+│   ├── worker-video/                 # High-performance Video Processing Node
 │   │   ├── handlers/
-│   │   │   ├── downloader.py     # Manages the file download process (Aria2/yt-dlp)
-│   │   │   ├── flow_ingest.py    # Orchestrates the main workflow: download -> process -> upload
-│   │   │   ├── processor.py      # Handles video processing using FFmpeg (screenshots, samples)
-│   │   │   └── status_manager.py # Manages and updates the status message on Telegram
-│   │   ├── Dockerfile            # Builds the Docker image for the video worker
-│   │   ├── entrypoint.sh         # Script that runs on container startup, ensures permissions
-│   │   ├── requirements.txt      # Lists the Python dependencies for the video worker
-│   │   └── worker.py             # Main entrypoint for the Celery worker, defines the task queue
+│   │   │   ├── engines/              # Modular Download Engines
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── aria2_engine.py   # Specialized logic for BitTorrent/Magnets
+│   │   │   │   └── ytdlp_engine.py   # Specialized logic for YouTube/Direct/Site links
+│   │   │   ├── download_manager.py   # The Dispatcher: Link probing & engine selection (formerly downloader.py)
+│   │   │   ├── listener.py           # The Ear: Bridge between Engines and UI Registry
+│   │   │   ├── flow_ingest.py        # Workflow Orchestrator (Rename -> Process -> Upload)
+│   │   │   ├── processor.py          # FFmpeg suite: Probing, Screenshots, Samples
+│   │   │   └── status_manager.py     # Telegram Live Status UI (Heartbeat loop)
+│   │   ├── Dockerfile                # Video Worker image build spec
+│   │   ├── entrypoint.sh             # Runtime init (Permissions & Dir setup)
+│   │   ├── requirements.txt          # Dependencies (yt-dlp, aria2p, pyrogram, etc.)
+│   │   └── worker.py                 # Service Entrypoint: Redis Queue Watcher & Task Manager
 │   └── web/                      # Frontend application Obsidian Glass UI (Placeholder)
 │       └── public/
 │           └── js/

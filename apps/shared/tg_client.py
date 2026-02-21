@@ -40,27 +40,6 @@ class TgClient:
 
     @classmethod
     def create_pyro_client(cls, name: str, bot_token: str = None, session_string: str = None, no_updates: bool = False, plugins: dict = None):
-        """Unified Client Builder"""
-        kwargs = {
-            "api_id": settings.TG_API_ID,
-            "api_hash": settings.TG_API_HASH,
-            "parse_mode": enums.ParseMode.HTML,
-            "in_memory": settings.USE_IN_MEMORY_SESSION, # 🔑 Toggle via settings
-            "workdir": "/app/sessions",
-            "plugins": plugins # 🔑 Optional Plugins
-        }
-
-        # 🔑 PRIORITY: Bot Token > Session String
-        if bot_token and len(bot_token) > 10:
-            kwargs["bot_token"] = bot_token
-        elif session_string and len(session_string) > 20:
-            kwargs["session_string"] = session_string
-
-        # Max Performance Tuning from WZML-X
-        # In apps/shared/tg_client.py
-
-    @classmethod
-    def create_pyro_client(cls, name: str, bot_token: str = None, session_string: str = None, no_updates: bool = False, plugins: dict = None):
         """Unified Client Builder with enhanced network stability."""
         kwargs = {
             "api_id": settings.TG_API_ID,
@@ -79,10 +58,11 @@ class TgClient:
         # ✅ FIX: Add robust connection and timeout settings
         # Increase retries for network flaps and set a longer timeout for operations.
         for param, value in {
-            "max_concurrent_transmissions": 100,
+            "max_concurrent_transmissions": 3,
             "sleep_threshold": 120, # Increase flood wait tolerance
-            "connection_retries": 5, # Retry up to 5 times on connection errors
-            "timeout": 30 # Set a 30-second timeout for API calls
+            "connection_retries": 3, # Retry up to 5 times on connection errors
+            "timeout": 30, # Set a 30-second timeout for API calls
+            "workers": 8  # More CPU threads for encryption/decryption
         }.items():
             if param in signature(Client.__init__).parameters:
                 kwargs[param] = value

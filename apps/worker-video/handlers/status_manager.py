@@ -22,7 +22,7 @@ class StatusManager:
     async def get_readable_message(self):
         """Builds the MLTB-Style UI text."""
         async with task_dict_lock:
-            tasks = [v for v in task_dict.values() if isinstance(v, dict)]
+            tasks = [v.get_ui_dict() for v in task_dict.values() if hasattr(v, 'get_ui_dict')]
         
         if not tasks:
             return None, None
@@ -87,7 +87,8 @@ class StatusManager:
                 # Use a lock and create a snapshot to prevent 'dict changed size' errors
                 async with task_dict_lock:
                     count = len(task_dict)
-                    tasks_snapshot = list(task_dict.values())
+                    # This uses the new ShadowTask helper to get the UI-friendly dictionary
+                    tasks_snapshot = [task.get_ui_dict() for task in task_dict.values() if hasattr(task, 'get_ui_dict')]
 
                 # CASE 1: No active tasks -> Delete message
                 if count == 0:

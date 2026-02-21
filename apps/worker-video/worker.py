@@ -14,7 +14,8 @@ from shared.database import db_service
 from pyrogram.handlers import MessageHandler
 from shared.settings import settings
 from pyrogram import Client, filters
-from handlers.downloader import downloader
+from handlers.listener import TaskListener
+from handlers.download_manager import DownloadManager
 from handlers.flow_ingest import MediaLeecher
 from motor.motor_asyncio import AsyncIOMotorClient
 from shared.registry import task_dict, task_dict_lock, MirrorStatus
@@ -115,12 +116,6 @@ class VideoWorker:
         self.db = mongo_client["shadow_systems"]
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-        # Initialize Downloader with THE BRIDGE
-        self.start_aria2_daemon()
-        await downloader.initialize(
-            redis=self.redis
-        )
-
         # 1. Start Primary Identity (1st Priority)
         started = await TgClient.start_bot(
             name=self.session_name, 
@@ -210,45 +205,24 @@ class VideoWorker:
                         user_tag = parts[7] if len(parts) > 7 else "0"
                         trigger_msg_id = parts[8] if len(parts) > 8 else None
 
-                        # Update Status to 'Downloading'
-                        status_key = f"task_status:{task_id}"
+                        # 1. Initialize the Listener (Handles Registry & UI registration)
+                        clean_name = name_hint if (name_hint and name_hint != "None") else f"TMDB {tmdb_id}"
+                        listener = TaskListener(
+                            task_id=task_id,
+                            name=clean_name,
+                            user_tag=user_tag,
+                            user_id=user_id,
+                            origin_chat_id=int(origin_chat_id)
+                        )
+                        # DownloadManager.start() calls it with the correct engine name.
 
-                        # 🛠️ DYNAMIC ENGINE DETECTION
-                        raw_url = parts[2]
-                        if raw_url.startswith("magnet") or ".torrent" in raw_url:
-                            engine_name = "Aria2 v1.36.0"
-                        else:
-                            engine_name = "YT-DLP Native"
-
-                        # ✅ REGISTER TASK IN GLOBAL UI
-                        async with task_dict_lock:
-                            task_dict[task_id] = {
-                                "task_id": task_id,
-                                "name": name_hint or f"TMDB {tmdb_id}",
-                                "progress": 0,
-                                "status": MirrorStatus.STATUS_QUEUED,
-                                "user_tag": user_tag,
-                                "engine": engine_name,
-                                "processed": "0B",
-                                "size": "0B",
-                                "speed": "0B/s",
-                                "eta": "Calculating...",
-                                "origin_msg_id": trigger_msg_id # Stored for cleanup
-                            }
-
-                        # Update Status to 'Downloading' (Redis side)
+                        # 2. Update Status in Redis
                         await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
+
                         try: 
-                            # 1. Download
-                            target_info = downloader.get_direct_url(raw_url)
-
-                            if not target_info:
-                                logger.error(f"❌ Could not resolve URL: {raw_url}")
-                                # Cleanup registry on error
-                                async with task_dict_lock: task_dict.pop(task_id, None)
-                                continue # Skip to next task
-
-                            local_path = await downloader.start_download(target_info, task_id=task_id)
+                            # 3. Hand over to the Manager (Dispatcher)
+                            manager = DownloadManager(self.redis)
+                            local_path = await manager.start(raw_url, task_id, listener)
 
                         except Exception as dl_err:
                             logger.error(f"Download Phase Failed: {dl_err}")
@@ -258,17 +232,21 @@ class VideoWorker:
                         
                         if local_path and os.path.exists(local_path):
                             
-                            # Optional: Rename before process
+                            # Rename before process
                             if name_hint:
                                 dir_name = os.path.dirname(local_path)
                                 ext = os.path.splitext(local_path)[1]
-                                new_filename = f"{name_hint}{ext}"
-                                new_path = os.path.join(dir_name, new_filename)
+                                new_path = os.path.join(dir_name, f"{name_hint}{ext}")
+                                os.rename(local_path, new_path)
+                                local_path = new_path
                                 
                                 logger.info(f"✏️ Renaming: {os.path.basename(local_path)} -> {new_filename}")
                                 os.rename(local_path, new_path)
                                 local_path = new_path
                                 logger.info(f"Renamed hint applied: {new_filename}")
+
+                            # Notify listener that the download phase is complete
+                            await listener.on_complete()
 
                             # 2. Upload with Hint
                             await self.leecher.upload_and_sync(
@@ -331,11 +309,22 @@ class VideoWorker:
                 await asyncio.sleep(2)
 
             finally:
-                        # ✅ MASTER PURGE: Ensure task is REMOVED from UI no matter what happened
-                        async with task_dict_lock:
-                            if task_id in task_dict:
-                                task_dict.pop(task_id, None)
-                                logger.info(f"🧹 Registry cleaned for {task_id}")
+                # ✅ FIX: Enhanced Master Purge
+                # Try to get task_id from parts if it exists, otherwise use local var
+                actual_id = None
+                if task_id: 
+                    actual_id = task_id
+                elif 'parts' in locals() and len(parts) > 0:
+                    actual_id = parts[0]
+
+                if actual_id:
+                    async with task_dict_lock:
+                        if actual_id in task_dict:
+                            task_dict.pop(actual_id, None)
+                            logger.info(f"🧹 Registry cleaned for {actual_id}")
+                
+                # Reset current task payload for graceful shutdown re-queuing
+                self.current_task_payload = None
 
 async def main():
     worker = VideoWorker()
