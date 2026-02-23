@@ -1,60 +1,50 @@
-# apps/worker-video/handlers/download_manager.py (formaerly downloader.py)
-import os, time, logging, yt_dlp
+# apps/worker-video/handlers/download_manager.py
+import logging
+
+import aria2p
+
+from handlers.mirror_leech_utils.download_utils.aria2_download import add_aria2_download
+from handlers.mirror_leech_utils.download_utils.direct_link_generator import (
+    direct_link_generator,
+)
+from handlers.mirror_leech_utils.download_utils.yt_dlp_download import YtDlpHelper
 from shared.settings import settings
-from handlers.engines.aria2_engine import Aria2Engine
-from handlers.engines.ytdlp_engine import YtdlpEngine
 
 logger = logging.getLogger("DownloadManager")
+
 
 class DownloadManager:
     def __init__(self, redis):
         self.redis = redis
+        # Re-use global aria2 instance for the engines
+        self.aria2 = aria2p.API(
+            aria2p.Client(host="http://localhost", port=6800, secret="")
+        )
 
-    def _get_safe_filename(self, candidate, default="video"):
-        """Prevents Filename too long (Linux limit 255)"""
-        if not candidate: return f"{default}_{int(time.time())}.mp4"
-        clean = candidate.split("?")[0]
-        if len(clean) > 200:
-            ext = os.path.splitext(clean)[1] or ".mp4"
-            return f"short_{int(time.time())}{ext}"
-        return clean
+    async def start(self, listener):
+        """Analyzes URL and dispatches to the correct WZML-style helper."""
+        url = listener.url
+        listener.aria2_instance = self.aria2  # Inject instance
 
-    def probe_link(self, url: str) -> dict:
-        """Analyzes URL to determine the best engine."""
+        # 1. Bypass Links (Direct Link Generator Logic)
         try:
-            with yt_dlp.YoutubeDL({'format': 'best', 'quiet': True}) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if info.get('direct'):
-                    return {"url": url, "filename": self._get_safe_filename(os.path.basename(url)), "type": "direct"}
-                
-                title = info.get('title', 'video')
-                ext = info.get('ext', 'mp4')
-                return {"url": info.get('url'), "filename": self._get_safe_filename(f"{title}.{ext}"), "type": "video_site"}
-        except:
-            return {"url": url, "filename": self._get_safe_filename(url.split("/")[-1]), "type": "raw"}
+            url = direct_link_generator(url)
+            if isinstance(url, tuple):
+                url = url[0]  # Handle (link, header) tuples
+            logger.info(f"🔗 URL Bypassed: {listener.task_id}")
+        except Exception as e:
+            logger.info(f"ℹ️ Direct Link Generator skipped: {e}")
 
-    async def start(self, url, task_id, listener):
-        """Dispatches the task to the correct engine."""
-        
-        # 1. Probing
-        target = self.probe_link(url)
-        raw_link = target['url']
+        # 2. Selection Logic
+        is_torrent = url.startswith(("magnet:", "bc:")) or url.endswith(".torrent")
 
-        # 2. Update Listener with chosen Engine Name before starting
-        engine_name = "Aria2 v1.36.0" if (raw_link.startswith("magnet") or ".torrent" in raw_link) else "YT-DLP Native"
-        await listener.on_setup(engine_name)
-        
-        # 3. Filename Prep
-        fname = target['filename']
-        final_path = os.path.join(settings.DOWNLOAD_DIR, fname)
-
-        # 4. Dispatch
-        if engine_name.startswith("Aria2"):
-            engine = Aria2Engine(listener, self.redis)
-            return await engine.download(raw_link)
+        if is_torrent:
+            # Torrent -> Aria2
+            return await add_aria2_download(listener, url, settings.DOWNLOAD_DIR)
         else:
-            engine = YtdlpEngine(listener)
-            return await engine.download(raw_link, final_path=final_path)
-
-# Singleton instance
-# Note: Redis will be injected by worker.py
+            # Everything else -> YT-DLP (Handles direct files and sites)
+            # WZML-X uses YT-DLP as a robust fallback for raw links too
+            yt_helper = YtDlpHelper(listener)
+            # Use name_hint if provided to force filename
+            filename = f"{listener.name_hint}.mp4" if listener.name_hint else None
+            return await yt_helper.add_download(url, settings.DOWNLOAD_DIR, filename)

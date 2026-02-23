@@ -397,7 +397,7 @@ You need a `tmdb_id` that exists in your database.
 ```bash
 curl "http://localhost:8080/api/library/list?limit=1"
 ```
-2. Note the `tmdb_id` and the `telegram_id` inside the `files` array.
+2. Note Down the `tmdb_id` and the `telegram_id` inside the `files` array.
 3. Run the deletion:
 ```bash
 # Replace 12345 with real TMDB ID

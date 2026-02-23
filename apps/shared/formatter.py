@@ -1,44 +1,57 @@
 # apps/shared/formatter.py
 import os
 import re
-import PTN
-import logging
 import urllib.parse
 from datetime import timedelta
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+import PTN
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 
 class MessageFormatter:
     """
     Design Engine: Transforms raw file data into aesthetic Telegram cards.
     Adheres to the "Shadow Systems" glass style.
     """
+
     LANG_MAP = {
-        'eng': 'English', 'jpn': 'Japanese', 'spa': 'Spanish',
-        'fra': 'French', 'ger': 'German', 'ita': 'Italian',
-        'rus': 'Russian', 'chi': 'Chinese', 'por': 'Portuguese',
-        'hin': 'Hindi', 'kor': 'Korean', 'ara': 'Arabic',
-        'unk': 'Unknown', 'und': 'Undefined'
+        "eng": "English",
+        "jpn": "Japanese",
+        "spa": "Spanish",
+        "fra": "French",
+        "ger": "German",
+        "ita": "Italian",
+        "rus": "Russian",
+        "chi": "Chinese",
+        "por": "Portuguese",
+        "hin": "Hindi",
+        "kor": "Korean",
+        "ara": "Arabic",
+        "unk": "Unknown",
+        "und": "Undefined",
     }
-    
+
     def __init__(self, domain="https://shadow.xyz"):
         # SAFETY : Stripping and Logic Check
-        raw_domain = os.getenv("DOMAIN_NAME", "https://shadow.xyz").strip().strip("'").strip('"')
-        
+        raw_domain = (
+            os.getenv("DOMAIN_NAME", "https://shadow.xyz").strip().strip("'").strip('"')
+        )
+
         # Enforce HTTPS unless localhost (Potato Mode)
         if "localhost" not in raw_domain and not raw_domain.startswith("https://"):
             raw_domain = f"https://{raw_domain}"
-        elif not raw_domain.startswith("http"): 
+        elif not raw_domain.startswith("http"):
             raw_domain = f"http://{raw_domain}"
-            
-        self.domain = raw_domain.rstrip('/')
+
+        self.domain = raw_domain.rstrip("/")
 
     def human_size(self, size_in_bytes: int) -> str:
         """Converts bytes to 1.45 GB"""
-         # Safety fallback
-        if not isinstance(size_in_bytes, (int, float)):
+        # Safety fallback
+        if not isinstance(size_in_bytes, int | float):
             return "0.00 B"
 
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
             if size_in_bytes < 1024:
                 return f"{size_in_bytes:.2f} {unit}"
             size_in_bytes /= 1024
@@ -46,151 +59,174 @@ class MessageFormatter:
 
     def format_duration(self, seconds: float):
         """Converts 1435s to 00:24:10"""
-        if not isinstance(seconds, (int, float)): seconds = 0
+        if not isinstance(seconds, int | float):
+            seconds = 0
         return str(timedelta(seconds=int(seconds))).zfill(8)
 
     def is_hash_filename(self, filename: str) -> bool:
         """Detects if filename is a mongo/hash id (e.g. 69635eecfedb533e248f61e6)"""
         base = os.path.splitext(filename)[0]
         # Common hash length is 24 (mongo) or 32 (md5) hex chars
-        return bool(re.match(r'^[a-fA-F0-9]{20,40}$', base))
+        return bool(re.match(r"^[a-fA-F0-9]{20,40}$", base))
 
     def build_caption(self, tmdb_id, meta, file_name, db_entry=None, episode_meta=None):
         """
         Builds specific formatted card for Shadow Systems V2.
         Ref: Monster 2004 anime example
-        
+
         TASK #30981 COMPLETE
 
         NAME: 📁 Monster [2004]
         EPISODE: S01 E04 - "The Executioner"
 
         ┌ 💿 Res: 1920x1080 (10bit) # or WebDL etc...
-        ├ 🔊 Audio: AAC 2.0 (Japanese, English) # all audio formats will be here and in mongoDB as well we need it for our frontend 
+        ├ 🔊 Audio: AAC 2.0 (Japanese, English) # all audio formats will be here and in mongoDB as well we need it for our frontend
         ├ 📝 Subtitles: Soft (English) # or Hindi etc...
         ├ 💾 Size: 1.45 GB
         ├ ⏳ Duration: 00:24:10
-        ├ ⭐ Rating: 8.7/10 # from TMDB or MAL according to content 
-        └ 🎭 Genre: Thriller, Mystery, Psychology # from TMDB or MAL according to content 
-        # all these are also needed in mongoDB for frontend 
+        ├ ⭐ Rating: 8.7/10 # from TMDB or MAL according to content
+        └ 🎭 Genre: Thriller, Mystery, Psychology # from TMDB or MAL according to content
+        # all these are also needed in mongoDB for frontend
         👇 PREVIEW ASSETS
         (Screenshots & Sample attached below)
 
-        #ShadowSystems #Anime 
+        #ShadowSystems #Anime
 
-        [📥 Direct DL](StreamVault_download_URL) | [🎬 Watch Online](StreamVault_PlayerPage_URL) 
+        [📥 Direct DL](StreamVault_download_URL) | [🎬 Watch Online](StreamVault_PlayerPage_URL)
         # buttons will be great even if bot is private
         """
         is_hash = self.is_hash_filename(file_name)
         ptn = PTN.parse(file_name) if not is_hash else {}
-        
+
         # 1. Base Info
         # Priority: DB Title (Monster) > PTN Title > Filename
-        title = db_entry.get('title') if db_entry else ptn.get('title', file_name)
-        year = db_entry.get('year') if db_entry else ptn.get('year', '202X')
+        title = db_entry.get("title") if db_entry else ptn.get("title", file_name)
+        year = db_entry.get("year") if db_entry else ptn.get("year", "202X")
 
-       # 2. Tag Resolver (Anime/Series/Movie)
-        media_type = db_entry.get('media_type', 'movie').upper()
-        if "TV" in media_type: media_type = "SERIES"
+        # 2. Tag Resolver (Anime/Series/Movie)
+        media_type = db_entry.get("media_type", "movie").upper()
+        if "TV" in media_type:
+            media_type = "SERIES"
 
         # 3. Episode Block (S01 E04 - "Title")
         episode_line = ""
-        season = ptn.get('season')
-        episode = ptn.get('episode')
-        
-        if season is not None and episode is not None:
-             ep_name = ""
-             if episode_meta and episode_meta.get('name'):
-                 ep_name = f' - "{episode_meta.get("name")}"' # - "The Executioner"
-             
-             episode_line = f"EPISODE: S{season:02d} E{episode:02d}{ep_name}"
+        s = episode_meta.get("season") if episode_meta else None
+        e = episode_meta.get("episode") if episode_meta else None
+
+        # Fallback: Regex for hyphenated branding (S01-E01)
+        if s is None:
+            match = re.search(r"[sS](\d+)-[eE](\d+)", file_name)
+            if match:
+                s, e = int(match.group(1)), int(match.group(2))
+
+        if s is not None and e is not None:
+            name_str = (
+                f" - \"{episode_meta.get('name')}\""
+                if episode_meta and episode_meta.get("name")
+                else ""
+            )
+            episode_line = f"<b>EPISODE:</b> <code>S{s:02d} E{e:02d}{name_str}</code>"
 
         # 4. Technical Stats (The Tree)
-        width = meta.get('width', 0)
+        width = meta.get("width", 0)
         res_str = "Unknown"
-        if width >= 3800: res_str = "4K UHD"
-        elif width >= 1900: res_str = "1080p (BluRay)"
-        elif width >= 1200: res_str = "720p (HD)"
-        elif width > 0: res_str = f"{width}x{meta.get('height')}"
-
-        if meta.get('is_10bit'): res_str += " (10bit)"
+        if width >= 3800:
+            res_str = "4K UHD"
+        elif width >= 1900:
+            res_str = "1080p (BluRay)"
+        elif width >= 1200:
+            res_str = "720p (HD)"
+        elif width > 0:
+            res_str = f"{width}x{meta.get('height')}"
+        if meta.get("is_10bit"):
+            res_str += " (10bit)"
 
         # 5. Audio Formatting (AAC 2.0 (Japanese, English))
         # Expected Schema: [{'codec': 'aac', 'channels': 5.1, 'lang': 'eng', 'code': 'eng'}]
         # Processor returns 'lang' as the full name, leech adds 'code' if parsed
         audio_text = "Unknown"
-        audio_list = meta.get('audio') or meta.get('audio_tracks') # Handle both names
-        
+        audio_list = meta.get("audio") or meta.get("audio_tracks")  # Handle both names
+
         if audio_list:
             # Codec + Channels (e.g. AAC 5.1)
-            first_codec = audio_list[0].get('codec', 'aac').upper()
-            chan = float(audio_list[0].get('channels', 2.0))
+            first_codec = audio_list[0].get("codec", "aac").upper()
+            chan = float(audio_list[0].get("channels", 2.0))
             chan_str = f"{int(chan)}.1" if chan % 1 != 0 else f"{int(chan)}.0"
-            
+
             # Languages
             langs = []
             for t in audio_list:
                 # Prefer short code if available (e.g. 'eng'), else full 'English'
-                l = t.get('code', t.get('lang', 'unk'))[:3].lower()
+                l = t.get("code", t.get("lang", "unk"))[:3].lower()
                 readable = self.LANG_MAP.get(l, l.title())
-                if readable not in langs: langs.append(readable)
-            
+                if readable not in langs:
+                    langs.append(readable)
+
             audio_text = f"{first_codec} {chan_str} ({', '.join(langs)})"
 
         # 6. Ratings / Genres
-        rating = str(round(db_entry.get('rating', 0.0), 1)) if db_entry else "N/A"
-        
-        g_list = db_entry.get('genres', [])
-        if not g_list: g_list = ['Uncategorized']
-        genres = ", ".join(g_list[:3]) # Limit 3
+        rating = str(round(db_entry.get("rating", 0.0), 1)) if db_entry else "N/A"
+
+        g_list = db_entry.get("genres", [])
+        if not g_list:
+            g_list = ["Uncategorized"]
+        genres = ", ".join(g_list[:3])  # Limit 3
 
         # 7. Subtitles
         sub_text = "None"
-        if meta.get('subtitles'):
-             # Logic to highlight ENG
-             eng = any('eng' in s.get('lang','').lower() for s in meta['subtitles'])
-             display = "English" if eng else meta['subtitles'][0].get('lang', 'Unknown')
-             plus = len(meta['subtitles']) - 1 if eng else len(meta['subtitles'])
-             if plus > 0: display += f" +{plus} others"
-             sub_text = f"Soft ({display})"
+        if meta.get("subtitles"):
+            # Logic to highlight ENG
+            eng = any("eng" in s.get("lang", "").lower() for s in meta["subtitles"])
+            display = "English" if eng else meta["subtitles"][0].get("lang", "Unknown")
+            plus = len(meta["subtitles"]) - 1 if eng else len(meta["subtitles"])
+            if plus > 0:
+                display += f" +{plus} others"
+            sub_text = f"Soft ({display})"
 
         # --- THE FINAL BLOCK ---
-        # Logic: If no Episode line, omit that row.
+        # Logic: We use a list to join only non-empty rows to prevent formatting gaps
 
-        layout = f"""
-<b>TASK #{tmdb_id} COMPLETE</b>
+        caption_lines = [
+            f"<b>TASK #{tmdb_id} COMPLETE</b>",
+            "",
+            f"<b>NAME:</b> 📁 <code>{title} [{year}]</code>",
+        ]
 
-<b>NAME:</b> 📁 <code>{title} [{year}]</code>
-{f"<b>{episode_line}</b>" if episode_line else ""}
+        if episode_line:
+            caption_lines.append(episode_line)
 
-┌ 💿 <b>Res:</b> #{res_str}
-├ 🔊 <b>Audio:</b> <code>{audio_text}</code>
-├ 📝 <b>Subtitles:</b> <code>{sub_text}</code>
-├ 💾 <b>Size:</b> <code>{self.human_size(meta.get('size_bytes', 0))}</code>
-├ ⏳ <b>Duration:</b> <code>{self.format_duration(meta.get('duration', 0))}</code>
-├ ⭐ <b>Rating:</b> <code>{rating}/10</code>
-└ 🎭 <b>Genre:</b> <i>{genres}</i>
+        caption_lines.extend([
+            "",
+            f"┌ 💿 <b>Res:</b> #{res_str}",
+            f"├ 🔊 <b>Audio:</b> <code>{audio_text}</code>",
+            f"├ 📝 <b>Subtitles:</b> <code>{sub_text}</code>",
+            f"├ 💾 <b>Size:</b> <code>{self.human_size(meta.get('size_bytes', 0))}</code>",
+            f"├ ⏳ <b>Duration:</b> <code>{self.format_duration(meta.get('duration', 0))}</code>",
+            f"├ ⭐ <b>Rating:</b> <code>{rating}/10</code>",
+            f"└ 🎭 <b>Genre:</b> <i>{genres}</i>",
+            "",
+            "👇 <b>PREVIEW ASSETS</b>",
+            "<i>(Screenshots & Sample attached below)</i>",
+            "",
+            f"#ShadowSystems #{media_type.title()}"
+        ])
 
-👇 <b>PREVIEW ASSETS</b>
-<i>(Screenshots & Sample attached below)</i>
-
-#ShadowSystems #{media_type.title()}
-"""
-        return layout.strip()
+        return "\n".join(caption_lines)
 
     def build_buttons(self, short_id: str):
         """Generates Buttons: Watch Online | Direct DL
-           Safety: Automatically cleans short_id and ensures strict URL validity.
-           Safety: Telegram rejects non-HTTPS links for buttons.
+        Safety: Automatically cleans short_id and ensures strict URL validity.
+        Safety: Telegram rejects non-HTTPS links for buttons.
         """
-        if not short_id: return None
-        
+        if not short_id:
+            return None
+
         # Ensure short_id is url safe
         safe_id = urllib.parse.quote(str(short_id))
 
         # Valid Domain Check (Prevents localhost/http crash)
         if not self.domain.startswith("https://"):
-            return None # Skip buttons if testing locally
+            return None  # Skip buttons if testing locally
 
         # Link 1: Archive Page (Direct DL)
         # Link 2: View Page (Streaming)
@@ -198,11 +234,14 @@ class MessageFormatter:
         archive_url = f"{self.domain}/archive/{safe_id}"
         view_url = f"{self.domain}/view/{safe_id}"
 
-        return InlineKeyboardMarkup([
+        return InlineKeyboardMarkup(
             [
-                InlineKeyboardButton("📥 Direct DL", url=archive_url),
-                InlineKeyboardButton("🎬 Watch Online", url=view_url)
+                [
+                    InlineKeyboardButton("📥 Direct DL", url=archive_url),
+                    InlineKeyboardButton("🎬 Watch Online", url=view_url),
+                ]
             ]
-        ])
+        )
+
 
 formatter = MessageFormatter(os.getenv("DOMAIN_NAME", "https://shadowsystems.xyz"))
