@@ -1,17 +1,17 @@
 # apps/manager/main.py
-import sys
 import logging
-import asyncio
-sys.path.append("/app/shared") # Docker fix for imports 
-from routers import library, auth, admin
-from fastapi import FastAPI, Request 
-from shared.settings import settings
-from shared.tg_client import TgClient
-from shared.database import db_service
-from fastapi.responses import JSONResponse
-from services.bot_manager import bot_manager
+import sys
+
+sys.path.append("/app/shared") # Docker fix for imports
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from routers import admin, auth, library
+from services.bot_manager import bot_manager
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from shared.database import db_service
+from shared.settings import settings
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +19,7 @@ logger = logging.getLogger("Manager")
 
 class GatekeeperMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # path IS DEFINED GLOBALLLY 
+        # path IS DEFINED GLOBALLLY
         path = request.url.path
 
         # 1. WHITE-LIST ROUTES (Always Open)
@@ -44,17 +44,17 @@ class GatekeeperMiddleware(BaseHTTPMiddleware):
         if path.startswith("/library/internal"):
              # We rely on Nginx IP whitelisting or Internal docker network
              # If accessed publicly, we can enforce secret, but usually Nginx blocks external access to this path anyway.
-             # For now, let's allow it if it's within the Docker network (hard to detect here easily) 
+             # For now, let's allow it if it's within the Docker network (hard to detect here easily)
              # OR strictly check secret if you want:
              pass
 
         # 5. STRICT PROD AUTHENTICATION (For Writes / Admin / Sensitive)
         client_key = request.headers.get("X-Shadow-Secret")
-        
+
         if client_key != settings.API_SECRET_KEY:
             logger.warning(f"⛔ Intruder Blocked: {request.client.host} {request.method} {path}")
             return JSONResponse(
-                status_code=403, 
+                status_code=403,
                 content={"detail": "🛡️ Access Denied: Missing Shadow-Key"}
             )
 
@@ -84,7 +84,7 @@ app.add_middleware(
 )
 
 # --- ROUTES ---
-app.include_router(library.router)  
+app.include_router(library.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 
@@ -93,7 +93,7 @@ app.include_router(admin.router)
 async def startup_event():
     """Ignition Sequence"""
     logger.info(f"Initializing Shadow Brain in {settings.MODE} mode...")
-    
+
     # Initialize Database
     try:
         await db_service.connect()
@@ -104,7 +104,7 @@ async def startup_event():
 
     # Initialize Manager Bot
     try:
-        await bot_manager.start() 
+        await bot_manager.start()
         logger.info("Manager connected.")
 
     except Exception as e:

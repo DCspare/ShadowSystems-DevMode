@@ -1,0 +1,57 @@
+[tool.ruff]
+# Target Python version (Matches Docker image)
+target-version = "py312"
+
+# Exclude standard directories
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "site-packages",
+    "temp.txt",
+]
+
+# 1. THE AUDIT RULES (WZML-X Style)
+# S = (flake8-bandit) rule category, covering a wide range of security issues.
+# E/W = Standard Errors/Warnings
+# F = Pyflakes (Logic bugs)
+# I = Isort (Clean imports)
+# B = Bandit (SECURITY AUDIT) - Vital for API Keys/Tokens
+# SIM = Simplify (ANTI-BLOAT)
+# UP = Upgrade (Modern Python 3.12 syntax)
+# ASYNC = Async Pitfalls (Ensures non-blocking code)
+# PTH = Pathlib (Modern path handling)
+lint.select = ["S", "E", "W", "F", "I", "B", "SIM", "UP", "ASYNC", "PTH"]
+
+# 2. THE EXCEPTIONS
+lint.ignore = [
+    "E501", # Ignore line length (Telegram captions & regex are naturally long)
+    "B008", # Allow function calls in defaults (Required for FastAPI Depends/Pydantic)
+    # "ASYNC109", # Ignore async timeout warnings (Pyrogram handled)
+]
+
+# 3. FORMATTING (Matches Black standard)
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore unused imports in __init__.py files
+"__init__.py" = ["F401"]
+# Allow print statements in engine files (for terminal bars)
+"apps/worker-video/handlers/engines/*" = ["T201"]
+
+[tool.ruff.lint.isort]
+# ✅ CRITICAL: Tells Ruff that these are your local folders
+# Ensures imports look like:
+# import os
+#
+# from shared.settings import settings
+# from handlers.listener import TaskListener
+known-first-party = ["shared", "handlers", "apps"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

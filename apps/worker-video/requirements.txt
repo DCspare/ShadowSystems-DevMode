@@ -21,4 +21,8 @@ requests
 psutil
 yt-dlp>=2023.11.16     
 aria2p
-tenacity==8.2.3        
+tenacity==8.2.3       
+cloudscraper
+lxml
+urllib3
+pycryptodome

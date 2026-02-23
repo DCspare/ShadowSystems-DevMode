@@ -19,80 +19,144 @@ To bypass hardware constraints during building, we utilize **"Potato-Mode" Workf
 
 ```text
 SHADOW-SYSTEMS (Root)
-├── apps
-│   ├── gateway/                  # NGINX Reverse Proxy
-│   │   ├── Dockerfile            # Builds the NGINX image
-│   │   └── nginx.conf.template   # NGINX configuration template
-│   ├── manager/                  # FastAPI Backend (Admin Panel & API)
-│   │   ├── core/
-│   │   │   ├── __init__.py       # Makes the 'core' directory a Python package
-│   │   │   ├── config.md         # (Deprecated)
-│   │   │   ├── security.py       # Handles authentication and authorization
-│   │   │   └── utils.md          # (Deprecated) Documentation for manager utilities
-│   │   ├── handlers/
-│   │   │   └── cmd_leech.py      # Contains logic to handle the /leech command from Telegram
-│   │   ├── routers/
-│   │   │   ├── admin.py          # API endpoints for administration and system stats
-│   │   │   ├── auth.py           # API endpoints for user authentication (magic link, guest access)
-│   │   │   └── library.py        # API endpoints for searching and managing the media library
-│   │   ├── services/
-│   │   │   ├── __init__.py       # Makes the 'services' directory a Python package
-│   │   │   ├── bot_manager.py    # Manages the Pyrogram client for interacting with Telegram
-│   │   │   ├── database.md       # (Deprecated)
-│   │   │   └── metadata.py       # Service for fetching metadata from TMDB and other sources
-│   │   ├── Dockerfile            # Builds the Docker image for the FastAPI manager application
-│   │   ├── main.py               # Main entrypoint for the FastAPI application
-│   │   └── requirements.txt      # Lists the Python dependencies for the manager app
-│   ├── shared/                   # Shared Python code used by both Manager and Workers
-│   │   ├── __init__.py           # Makes the 'shared' directory a Python package
-│   │   ├── database.py           # Handles connection to the MongoDB database
-│   │   ├── formatter.py          # Logic for creating aesthetically pleasing Telegram message formats
-│   │   ├── progress.py           # Calculates and formats download/upload progress and speed
-│   │   ├── registry.py           # A state manager for tracking active tasks (downloads, uploads)
-│   │   ├── schemas.py            # Pydantic models for data validation and serialization
-│   │   ├── settings.py           # Centralized configuration management using Pydantic's BaseSettings
-│   │   ├── tg_client.py          # Wrapper for the Telegram client (Pyrogram)
-│   │   └── utils.py              # General utility functions shared across applications
-│   ├── stream-engine/            # Golang high-performance stream handler
-│   │   ├── core/
-│   │   │   ├── downloader.go     # Handles the downloading of file chunks from Telegram
-│   │   │   └── telegram.go       # Establishes and manages the core connection to Telegram
-│   │   ├── Dockerfile            # Builds the Docker image for the Go stream-engine
-│   │   ├── go.mod                # Declares the Go module's path and dependencies
-│   │   ├── go.sum                # Contains the checksums of the Go module dependencies
-│   │   └── main.go               # Main entrypoint for the Go HTTP server that handles streaming
-│   ├── worker-video/                 # High-performance Video Processing Node
-│   │   ├── handlers/
-│   │   │   ├── engines/              # Modular Download Engines
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── aria2_engine.py   # Specialized logic for BitTorrent/Magnets
-│   │   │   │   └── ytdlp_engine.py   # Specialized logic for YouTube/Direct/Site links
-│   │   │   ├── download_manager.py   # The Dispatcher: Link probing & engine selection (formerly downloader.py)
-│   │   │   ├── listener.py           # The Ear: Bridge between Engines and UI Registry
-│   │   │   ├── flow_ingest.py        # Workflow Orchestrator (Rename -> Process -> Upload)
-│   │   │   ├── processor.py          # FFmpeg suite: Probing, Screenshots, Samples
-│   │   │   └── status_manager.py     # Telegram Live Status UI (Heartbeat loop)
-│   │   ├── Dockerfile                # Video Worker image build spec
-│   │   ├── entrypoint.sh             # Runtime init (Permissions & Dir setup)
-│   │   ├── requirements.txt          # Dependencies (yt-dlp, aria2p, pyrogram, etc.)
-│   │   └── worker.py                 # Service Entrypoint: Redis Queue Watcher & Task Manager
-│   └── web/                      # Frontend application Obsidian Glass UI (Placeholder)
-│       └── public/
-│           └── js/
-│               └── ads_core.js   # Placeholder for client-side advertisement logic
-├── config/
-│   └── workers/
-│       └── prometheus.yml        # Prometheus configuration for monitoring workers
-├── data/                         # Local Volume Persistence (Cache/Sessions)
-├── docs/                         # Architectural Blueprints (Context Files)
-├── .dockerignore
-├── .env.example                  # Environmental Secrets
-├── .gitignore
-├── docker-compose.dev.yml        # Docker Compose file for development environment
-├── gen_session.py                # Script for generating a new session
-├── README.md                     # Main project documentation
-├── sub.txt                       # Example subtitle file
-└── Survivors-Log.md              # A log of technical challenges and their solutions
+├── apps/                               # Core application services
+│   ├── gateway/                        # NGINX Reverse Proxy and Entrypoint
+│   │   ├── Dockerfile                  # Builds the NGINX image
+│   │   └── nginx.conf.template         # NGINX configuration template with ENV support
+│   ├── manager/                        # FastAPI Backend (Admin Panel, API, & Bot Logic)
+│   │   ├── core/                       # Fundamental app configuration and security
+│   │   │   ├── __init__.py             # Python package marker
+│   │   │   ├── config.md               # [DEPRECATED] (Now managed via Pydantic settings)
+│   │   │   ├── security.py             # JWT, Auth, and Security middleware
+│   │   │   └── utils.md                # [DEPRECATED] (Replaced by shared/utils.py)
+│   │   ├── handlers/                   # Telegram bot command handlers
+│   │   │   ├── __init__.py             # Python package marker
+│   │   │   └── cmd_leech.py            # Logic for handling /leech commands
+│   │   ├── routers/                    # API route definitions (FastAPI)
+│   │   │   ├── admin.py                # Dashboard and system management APIs
+│   │   │   ├── auth.py                 # Magic Link and Session Auth APIs
+│   │   │   └── library.py              # Media library search and management APIs
+│   │   ├── services/                   # Business logic and external integrations
+│   │   │   ├── __init__.py             # Python package marker
+│   │   │   ├── bot_manager.py          # Pyrogram Admin Client Management
+│   │   │   ├── database.md             # [DEPRECATED] (Now handled by apps/shared/database.py)
+│   │   │   └── metadata.py             # TMDB/MAL Scrapers for movie/anime info
+│   │   ├── Dockerfile                  # Containerizes the FastAPI manager
+│   │   ├── main.py                     # FastAPI application entry point
+│   │   ├── requirements.txt            # Python dependencies for the manager service
+│   ├── shared/                         # Common logic shared across all Python services
+│   │   ├── ext_utils/                  # Extended utility functions
+│   │   │   ├── exceptions.py           # Custom exception definitions
+│   │   │   ├── help_messages.py        # Static strings for Telegram help commands
+│   │   │   ├── links_utils.py          # URL parsing and link validation logic
+│   │   │   └── status_utils.py         # Formatting utilities for task status messages
+│   │   ├── status_utils/               # Specific status formatters for engines
+│   │   │   ├── aria2_status.py         # Aria2 task status generator
+│   │   │   └── yt_dlp_status.py        # yt-dlp task status generator
+│   │   ├── __init__.py                 # Python package marker
+│   │   ├── database.py                 # Centralized MongoDB connection logic
+│   │   ├── formatter.py                # Visual styling for Telegram messages
+│   │   ├── progress.py                 # Logic for calculating speed and ETA
+│   │   ├── registry.py                 # Shared state/task tracker
+│   │   ├── schemas.py                  # Pydantic models (Data Sources of Truth)
+│   │   ├── settings.py                 # Master configuration (Environment variables)
+│   │   ├── tg_client.py                # Reusable Telegram client wrapper
+│   │   └── utils.py                    # Generic shared utility functions
+│   ├── stream-engine/                  # Golang High-Performance Data Passthrough
+│   │   ├── core/                       # Internal Go logic
+│   │   │   ├── downloader.go           # Logic for chunking and streaming from TG
+│   │   │   └── telegram.go             # Telegram API connection management
+│   │   ├── Dockerfile                  # Builds the Go stream-engine binary
+│   │   ├── go.mod                      # Go dependency management
+│   │   ├── go.sum                      # Go dependency checksums
+│   │   └── main.go                     # Entry point for the Go stream server
+│   ├── web/                            # Next.js Frontend (Obsidian Glass UI) [Placeholder]
+│   │   ├── app/                        # Next.js App Router structure
+│   │   ├── components/                 # Reusable React UI components
+│   │   │   ├── admin/                  # Admin-specific components
+│   │   │   ├── player/                 # Video/Audio player components
+│   │   │   ├── reader/                 # Manga/Book reader components
+│   │   │   └── ui/                     # Basic UI primitives
+│   │   ├── lib/                        # Frontend library functions
+│   │   └── public/                     # Static assets
+│   │       └── js/                     # Client-side JavaScript
+│   │           └── ads_core.js         # Core logic for ad delivery (placeholder)
+│   ├── worker-manga/                   # Specialized worker for manga processing
+│   │   └── handlers/                   # Manga-specific task handlers
+│   └── worker-video/                   # High-performance video processing worker
+│       ├── downloads/                  # Temporary storage for active downloads
+│       ├── handlers/                   # Task-specific logic
+│       │   ├── listeners/              # Protocol-specific listeners
+│       │   │   └── task_listener.py    # Logic for listening to task queues
+│       │   ├── mirror_leech_utils/     # Ported legacy utilities
+│       │   │   ├── download_utils/     # Legacy download helper functions
+│       │   │   │   ├── __init__.py     # Python package marker
+│       │   │   │   ├── aria2_download.py     # Legacy Aria2 helper
+│       │   │   │   ├── direct_link_generator_license.md # License for direct link scripts
+│       │   │   │   ├── direct_link_generator.py    # Logic for parsing direct download links
+│       │   │   │   └── yt_dlp_download.py    # Legacy yt-dlp helper
+│       │   │   ├── __init__.py         # Python package marker
+│       │   ├── download_manager.py     # Orchestrates download lifecycle
+│       │   ├── downloader.md           # [DEPRECATED] (Functionality moved to engines/)
+│       │   ├── flow_ingest.py          # Main worker task pipeline (DL -> Process -> Upload)
+│       │   ├── processor.py            # Video processing (FFmpeg, thumbnails, metadata)
+│       │   └── status_manager.py       # Telegram status update orchestration
+│       ├── cookies.txt                 # Scraper auth cookies
+│       ├── Dockerfile                  # Builds the video worker image
+│       ├── entrypoint.sh               # Environment setup and startup script
+│       ├── requirements.txt            # Python dependencies for video worker
+│       └── worker.py                   # Celery/Task Worker entry point
+├── config/                             # Global system configuration
+│   └── workers/                        # Worker-specific configurations
+│       └── prometheus.yml              # Prometheus metrics configuration
+├── data/                               # Persistent data volumes (ignored by git)
+│   ├── cache/                          # Redis/Temporary cache storage
+│   ├── mongo/                          # MongoDB database files
+│   ├── redis/                          # Redis database files
+│   └── sessions/                       # Active Telegram session storage
+├── docs/                               # System documentation
+│   ├── example_files/                  # Template files for deployment and config
+│   │   ├── Dockerfile.md               # Reference documentation for Docker builds
+│   │   ├── env_example.md              # Template for environment variables
+│   │   ├── gitignore.md                # Template for .gitignore patterns
+│   │   ├── nginx_conf.md               # Reference for NGINX routing
+│   │   ├── project-structure.md        # Reference project architecture
+│   │   ├── prometheus_yml.md           # Reference for monitoring setup
+│   │   └── requirements_txt.md         # Reference for python dependencies
+│   └── v2_blueprint/                   # Architectural planning and AI contexts
+│   │   ├── AI_DeveloperMode_PROMPT.md  # System prompt for development AI
+│   │   ├── AI_ReadVault_PROMPT.md      # AI instructions for manga subsystem
+│   │   ├── AI_StreamVault_PROMPT.md    # AI instructions for video subsystem
+│   │   ├── context_01_infrastructure.md    # Infrastructure and deployment specs
+│   │   ├── context_02_frontend_ux.md       # Design and UX guidelines
+│   │   ├── context_03_telegram_logic.md    # Bot behavior and logic specs
+│   │   ├── context_04_database.md          # Schema and data flow specs
+│   │   ├── context_05_future_roadmap.md    # Planned features and scale targets
+│   │   ├── context_06_admin_panel.md       # Manager dashboard requirements
+│   │   ├── context_07_franchise_model.md   # Multi-instance scaling logic
+│   │   ├── context_08_monetization_ads.md  # Revenue and ad strategy
+│   │   ├── context_09_growth_survival.md   # Product growth and retention plans
+│   │   ├── context_10_development_workflow.md # Git and CI/CD procedures
+│   │   ├── context_11_music_engine.md      # Audio streaming subsystem specs
+│   │   ├── context_readvault.md            # Manga engine core logic specs
+│   │   ├── Extra_Bot_Features.md           # Wishlist of secondary features
+│   │   ├── GIT_WORKFLOW.md                 # Git branch and commit standards
+│   │   └── README.md                       # Blueprint introduction
+│   ├── OPERATOR_MANUAL.md              # Instruction manual for system administrators
+├── Ideas/                              # Research, inspiration, and analysis
+│   ├── mirror-leech-telegram-bot/      # Analysis of source project 1
+│   ├── TG-FileStreamBot/               # Analysis of source project 2
+│   ├── WZML-X/                         # Analysis of source project 3
+│   └── File Tree.md                    # Detailed project structure overview (Our Workspace)
+├── .dockerignore                       # Exclusions for Docker builds
+├── .env.example                        # Template for required environment variables
+├── .gitignore                          # Exclusions for Git version control
+├── docker-compose.dev.yml              # Local orchestration for development
+├── gen_session.py                      # Utility to generate Pyrogram sessions
+├── pyproject.toml                      # Modern Python project configuration [Ruff]
+├── README.md                           # Main project overview and quickstart
+├── sub.txt                             # Sample subtitle for testing
+└── Survivors-Log.md                    # Technical log of issues and resolutions
 ```
 
 ---
@@ -204,6 +268,22 @@ SHADOW-SYSTEMS (Root)
 - [x] **Hybrid-Identity Node Isolation**: Implemented `WORKER_MODE` protocol. Workers now run in "Stealth-Bot" mode to protect User Identities, while the Manager utilizes "Muscle-User" mode for high-speed metadata ingestion.
 - [x] **Unified Logging Kernel**: Standardized logging format across all Python nodes, allowing for clean, time-stamped centralized debugging.
 
+
+### Downloading and Uploading Refactored:
+Key Changes:
+- Registry: Migrated task_dict from raw dictionaries to polymorphic Status Objects.
+- Status Utils: Implemented Aria2Status and YtDlpStatus for engine-specific math 
+  (speed, ETA, and progress) providing 100% UI stability.
+- Task Listener: Introduced TaskListener as the central lifecycle orchestrator 
+  handling Download -> Rename -> Process -> Upload transitions.
+- Engines: Modularized Aria2 and YT-DLP into mirror_leech_utils, enabling 
+  isolated execution and robust error handling.
+- Direct Link Generator: Integrated WZML-X bypass logic for high-speed direct 
+  downloads from 50+ file hosts (Mediafire, Gofile, etc.).
+- UI/UX: Fixed 'Heartbeat CRASH' in Status Manager; restored terminal progress 
+  bars via non-blocking logging hooks in the TaskListener.
+- Bug Fixes: Resolved task ID mismatches (8-char vs 10-char hex), 'None.mp4' 
+  renaming errors, and Pydantic settings validation for cookie paths.
 ---
 
 ## 🏗 System Protocol (The Golden Rules)
@@ -259,5 +339,5 @@ for all Hurdles check: [Survivors Log](Survivors-Log.md)
 
 ---------
 
-*Last Updated: 11-02-2026*
-*Time: 06:09PM*
+*Last Updated: 23-02-2026*
+*Time: 12:09PM*
