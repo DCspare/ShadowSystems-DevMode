@@ -1,37 +1,34 @@
 # manager/handlers/cmd_leech.py (formerly leech.py)
-import logging
+import os
 import sys
 import uuid
-
+import logging
 sys.path.append("/app/shared")
-from pyrogram import Client, enums, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-from shared.database import db_service
 from shared.settings import settings
+from shared.database import db_service
+from shared.schemas import SignRequest
+from pyrogram import Client, filters, enums
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logger = logging.getLogger("LeechHandler")
 
 # Security: Only allow Owner (Loaded from Pydantic Settings)
 OWNER_ID = settings.TG_OWNER_ID
 
-
 # --- 1. THE LEECH COMMAND ---
 @Client.on_message(filters.command(["leech", "mirror"]) & filters.user(OWNER_ID))
 async def leech_command(client, message):
     try:
-        # Advanced Parsing to support quotes:
+        # Advanced Parsing to support quotes: 
         # /leech http... 123 tv "The Night Manager S01E01"
         text = message.text
-
+        
         # 1. URL
         parts = text.split(" ", 2)
-        if len(parts) < 2:
-            return await message.reply_text(
-                "<b>❌ Usage:</b> <code>/leech [URL] [TMDB_ID] [type] [name]</code>"
-            )
+        if len(parts) < 2: 
+            return await message.reply_text("<b>❌ Usage:</b> <code>/leech [URL] [TMDB_ID] [type] [name]</code>")
         url = parts[1]
-
+        
         # Default Params
         tmdb_id = "0"
         type_hint = "auto"
@@ -40,17 +37,16 @@ async def leech_command(client, message):
         # 2. Extract Options if present
         if len(parts) > 2:
             remaining = parts[2]
-
+            
             # Logic: If starts with quotes, it's a name hint, otherwise ID
             # Simple splitter by spaces
             sub_args = remaining.split(" ")
-
+            
             # Helper to check if string looks like an ID
             if sub_args[0].isdigit():
                 tmdb_id = sub_args[0]
-                if len(sub_args) > 1:
-                    type_hint = sub_args[1]
-
+                if len(sub_args) > 1: type_hint = sub_args[1]
+                
                 # Check for Name Hint (everything after type)
                 # Join remaining args and strip quotes
                 if len(sub_args) > 2:
@@ -59,10 +55,10 @@ async def leech_command(client, message):
         # Queue Logic
         if db_service.redis:
             user_id = message.from_user.id
-            origin_chat_id = message.chat.id  # <--- TRACK ORIGIN
-            trigger_msg_id = message.id  # <--- Store this to delete later
+            origin_chat_id = message.chat.id # <--- TRACK ORIGIN
+            trigger_msg_id = message.id # <--- Store this to delete later
             limit_key = f"active_user_tasks:{user_id}"
-
+            
             # 1. Check Limits (Bypass if user is Owner OR Toggle is OFF)
             if settings.ENABLE_USER_LIMITS and user_id != OWNER_ID:
                 active_count = await db_service.redis.scard(limit_key)
@@ -77,14 +73,10 @@ async def leech_command(client, message):
                     )
 
             # Prepare User Tag (Username or First Name)
-            user_tag = (
-                f"@{message.from_user.username}"
-                if message.from_user.username
-                else message.from_user.first_name
-            )
+            user_tag = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
 
             # 2. Setup Task Identity
-            task_id = str(uuid.uuid4())[:8]  # Short unique ID
+            task_id = str(uuid.uuid4())[:8] # Short unique ID 
             status_key = f"task_status:{task_id}"
 
             # 3. Add to User's Active Set
@@ -97,7 +89,7 @@ async def leech_command(client, message):
             # Strip -100 for proper Deep Link
             clean_cid = str(settings.TG_LOG_CHANNEL_ID).replace("-100", "")
             chan_link = f"https://t.me/c/{clean_cid}/1"
-
+            
             # Reply with Buttons
             response_text = (
                 f"<pre>🚀 Task Queued</pre>\n"
@@ -113,18 +105,9 @@ async def leech_command(client, message):
                 if message.chat.type != enums.ChatType.PRIVATE:
                     # Send info to Owner DM
                     sent_msg = await client.send_message(
-                        chat_id=OWNER_ID,
-                        text=response_text
-                        + f"\n\n📍 <i>Triggered in: {message.chat.title}</i>",
-                        reply_markup=InlineKeyboardMarkup(
-                            [
-                                [
-                                    InlineKeyboardButton(
-                                        "📊 Status", callback_data="check_status"
-                                    )
-                                ]
-                            ]
-                        ),
+                        chat_id=OWNER_ID, 
+                        text=response_text + f"\n\n📍 <i>Triggered in: {message.chat.title}</i>",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📊 Status", callback_data="check_status")]])
                     )
                 else:
                     sent_msg = await message.reply_text(response_text, quote=True)
@@ -133,25 +116,23 @@ async def leech_command(client, message):
                 sent_msg = await message.reply_text(response_text, quote=True)
 
             # 6. CREATE THE REDIS STATUS ENTRY (a "Live Status" in Redis)
-            await db_service.redis.hset(
-                status_key,
-                mapping={
-                    "name": name_hint or f"TMDB {tmdb_id}",
-                    "status": "queued",
-                    "progress": 0,
-                    "tmdb_id": tmdb_id,
-                    "user_tag": user_tag,
-                    "chat_id": str(message.chat.id),
-                    "msg_id": str(sent_msg.id),
-                    "trigger_msg_id": str(trigger_msg_id),
-                },
-            )
+            await db_service.redis.hset(status_key, mapping={
+                "name": name_hint or f"TMDB {tmdb_id}",
+                "status": "queued",
+                "progress": 0,
+                "tmdb_id": tmdb_id,
+                "user_tag": user_tag,
+                "chat_id": str(message.chat.id),
+                "msg_id": str(sent_msg.id),
+                "trigger_msg_id": str(trigger_msg_id)
+            })
             # Expire status after 1 hour to keep Redis clean
             await db_service.redis.expire(status_key, 3600)
 
             # 7. PAYLOAD & PUSH TO QUEUE
             # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id|user_tag|trigger_msg_id
             payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}|{user_tag}|{trigger_msg_id}"
+            
 
             # 5. Push to Queue
             await db_service.redis.lpush("queue:leech", payload)
@@ -163,40 +144,31 @@ async def leech_command(client, message):
         logger.error(f"Leech Error: {e}")
         await message.reply_text(f"⚠️ Internal Error: {e}")
 
-
 # --- 2. THE CANCEL LOGIC (Smarter Check) ---
 @Client.on_message(filters.command("cancel") & filters.user(OWNER_ID))
 async def cancel_task(client, message):
     if len(message.command) < 2:
-        return await message.reply_text(
-            "Usage: <code>/cancel task_id</code> or click link in status."
-        )
-
+        return await message.reply_text("Usage: <code>/cancel task_id</code> or click link in status.")
+    
     task_id = message.command[1]
     status_key = f"task_status:{task_id}"
-
+    
     # Check status in Redis
     data = await db_service.redis.hgetall(status_key)
     active_statuses = ["queued", "downloading", "uploading"]
 
     if not data or data.get("status") not in active_statuses:
-        return await message.reply_text(
-            f"❌ <b>Task <code>{task_id}</code></b> is not in an active state or doesn't exist."
-        )
+        return await message.reply_text(f"❌ <b>Task <code>{task_id}</code></b> is not in an active state or doesn't exist.")
 
     # Set a Kill Flag in Redis
     await db_service.redis.set(f"kill_signal:{task_id}", "1", ex=300)
-
-    # Update status in Redis so /status reflects it immediately
     await db_service.redis.hset(status_key, "status", "cancelling")
 
-    # Release user slot
-    await db_service.redis.srem(f"active_user_tasks:{message.from_user.id}", task_id)
-
-    await message.reply_text(
-        f"🛑 Cancel requested for <code>{task_id}</code>. User slot released."
-    )
-
+    # NEW: Remove from user's active set immediately so they can try again 
+    # without waiting for the slow worker to acknowledge.
+    await db_service.redis.srem(f"active_user_tasks:{OWNER_ID}", task_id)
+    
+    await message.reply_text(f"🛑 Cancel requested for <code>{task_id}</code>. User slot released.")
 
 # Enables clicking /cancel_ID directly from the status message
 @Client.on_message(filters.regex(r"^/cancel_([a-fA-F0-9]+)") & filters.user(OWNER_ID))
@@ -206,7 +178,6 @@ async def quick_cancel(client, message):
     message.command = ["cancel", task_id]
     await cancel_task(client, message)
 
-
 # --- THE STATUS LOGIC (Shared by Command and Button) ---
 async def build_status_text():
     """Generates a clean, professional view for /status and callback"""
@@ -215,31 +186,31 @@ async def build_status_text():
 
     keys = await db_service.redis.keys("task_status:*")
     active_lines = []
-
+    
     for key in keys:
         data = await db_service.redis.hgetall(key)
-        if not data:
-            continue
-
+        if not data: continue
+        
         task_id = key.split(":")[-1]
         raw_status = data.get("status", "unknown") or "unknown"
         status = raw_status.upper()
         progress = data.get("progress", "0") or "0"
         name = data.get("name", "Unknown Content")
-
+        
         # Only show truly active tasks
         # This hides 'CANCELLING', 'COMPLETED', and 'FAILED' from cluttering the list
         if status in ["QUEUED", "DOWNLOADING", "UPLOADING"]:
+
             # Better Progress Bar Logic
             try:
                 prog_int = int(float(progress))
                 filled = min(max(prog_int // 10, 0), 10)
                 progress_bar = f"\n   └ <code>[{'■' * filled}{'□' * (10 - filled)}]</code> {prog_int}%"
-            except:
+            except: 
                 progress_bar = f" ({progress}%)"
-
+            
             # Cleaner Labels (No double ID)
-            # Format: ⚡ Content Name
+            # Format: ⚡ Content Name 
             #           └ 🛠️ Status:
             #           └ 🆔 ID:
             #           └ 🛑 /cancel_task_id
@@ -257,21 +228,14 @@ async def build_status_text():
         t_id = parts[0]
         # Robust name hint extraction
         n_hint = parts[4] if len(parts) > 4 and parts[4] else f"TMDB {parts[1]}"
-        pending_lines.append(
-            f"<code>{i+1}.</code> <b>{n_hint}</b> (ID: <code>{t_id}</code>)"
-        )
+        pending_lines.append(f"<code>{i+1}.</code> <b>{n_hint}</b> (ID: <code>{t_id}</code>)")
 
     header = "🛰️ <b>Shadow Systems Status</b>\n" + ("—" * 15)
-    active_section = "\n\n🔄 <b>ACTIVE TASKS</b>\n" + (
-        "\n".join(active_lines) if active_lines else "_No active workers._"
-    )
-    queue_section = "\n\n⏳ <b>PENDING QUEUE</b>\n" + (
-        "\n".join(pending_lines) if pending_lines else "_Queue is empty._"
-    )
+    active_section = "\n\n🔄 <b>ACTIVE TASKS</b>\n" + ("\n".join(active_lines) if active_lines else "_No active workers._")
+    queue_section = "\n\n⏳ <b>PENDING QUEUE</b>\n" + ("\n".join(pending_lines) if pending_lines else "_Queue is empty._")
     footer = f"\n\n📊 <b>Total Pending:</b> <code>{len(queue_items)}</code>"
-
+    
     return header + active_section + queue_section + footer
-
 
 # --- 3. STATUS COMMAND HANDLER ---
 @Client.on_message(filters.command("status") & filters.user(OWNER_ID))
@@ -281,7 +245,6 @@ async def status_cmd_handler(client, message):
         await message.reply_text(status_text, quote=True)
     except Exception as e:
         await message.reply_text(f"❌ Status Error: {e}")
-
 
 # --- 4. CALLBACK HANDLER ---
 @Client.on_callback_query(filters.regex("check_status"))
@@ -293,20 +256,14 @@ async def status_callback_handler(client, callback_query):
             return await callback_query.answer("⛔ Access Denied", show_alert=True)
 
         status_text = await build_status_text()
-
+        
         # Edit the existing message to show status
         try:
             await callback_query.message.edit_text(
                 status_text,
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "🔄 Refresh Status", callback_data="check_status"
-                            )
-                        ]
-                    ]
-                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Refresh Status", callback_data="check_status")]
+                ])
             )
             # Answer the callback to remove the loading spinner
             await callback_query.answer("Status Updated")
@@ -314,8 +271,7 @@ async def status_callback_handler(client, callback_query):
             # Telegram throws error if you try to edit with EXACT same text
             if "MESSAGE_NOT_MODIFIED" in str(edit_err):
                 await callback_query.answer("Already Up to date ✅")
-            else:
-                raise edit_err
+            else: raise edit_err
 
     except Exception as e:
         logger.error(f"Callback Error: {e}")

@@ -1,16 +1,13 @@
 # apps/shared/tg_client.py
+import os
 import asyncio
 import logging
-import os
+from pyrogram import raw # Need raw MTProto functions
 from inspect import signature
-
-from pyrogram import (
-    Client,
-    enums,
-    handlers,  # Need raw MTProto functions
-)
-
+from typing import Dict, Optional
 from shared.settings import settings
+from shared.database import db_service 
+from pyrogram import Client, enums, handlers
 
 logger = logging.getLogger("ShadowTG")
 
@@ -21,8 +18,8 @@ class TgClient:
 
     bot: Client = None
     user: Client = None
-    helper_bots: dict[int, Client] = {}
-    helper_loads: dict[int, int] = {}
+    helper_bots: Dict[int, Client] = {}
+    helper_loads: Dict[int, int] = {}
 
     IS_PREMIUM_USER = False
     MAX_SPLIT_SIZE = 2097152000
@@ -34,7 +31,7 @@ class TgClient:
         # Clean consistent format: 2026-02-11 12:00:00 - NodeName - LEVEL - Message
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
-
+        
         # Reset and apply to root to stop Uvicorn/Pyrogram from making a mess
         root = logging.getLogger()
         for h in root.handlers[:]: root.removeHandler(h)
@@ -81,7 +78,7 @@ class TgClient:
         if not target_token or len(target_token) < 10:
             logger.warning(f"⚠️ No Bot Token for {name}. Checking for User fallback...")
             return False
-
+        
         async with cls._lock:
             if cls.bot: return True
             cls.bot = cls.create_pyro_client(name, bot_token=target_token, plugins=plugins)
@@ -94,7 +91,7 @@ class TgClient:
     async def start_user(cls):
         """Muscle identity (Only starts if WORKER_MODE is USER or not set)"""
         mode = os.getenv("WORKER_MODE", "BOT").upper()
-
+        
         # 🛡️ PROTECT ACCOUNT: Workers in BOT mode don't need User identities.
         if mode == "BOT":
             logger.info("ℹ️ WORKER_MODE=BOT. Skipping User Session connection for safety.")
@@ -104,14 +101,14 @@ class TgClient:
             logger.info("📡 WORKER_MODE=USER. Initializing Muscle...")
             try:
                 cls.user = cls.create_pyro_client(
-                    "ShadowUser",
+                    "ShadowUser", 
                     session_string=settings.TG_SESSION_STRING,
                     no_updates=True
                 )
                 await cls.user.start()
                 cls.IS_PREMIUM_USER = cls.user.me.is_premium
                 cls.MAX_SPLIT_SIZE = 4194304000 if cls.IS_PREMIUM_USER else 2097152000
-
+                
                 uname = cls.user.me.username or cls.user.me.first_name
                 logger.info(f"⚡ User: [{uname}] Premium: {cls.IS_PREMIUM_USER} Connected.")
             except Exception as e:
@@ -127,11 +124,11 @@ class TgClient:
         if not settings.HELPER_TOKENS or len(settings.HELPER_TOKENS) < 5:
             logger.info("ℹ️ Helper Bots Swarm is disabled.")
             return
-
+        
         tokens = settings.HELPER_TOKENS.split()
         # Filter out invalid entries like '0'
         tokens = [t for t in tokens if len(t) > 10]
-
+        
         if not tokens:
             return
 
@@ -167,10 +164,10 @@ class TgClient:
         """Standard Peer Discovery + Redis Brain Sync"""
         target_ids = [settings.TG_LOG_CHANNEL_ID, settings.TG_BACKUP_CHANNEL_ID]
         valid_ids = [i for i in target_ids if i and i != 0]
-
+        
         for cid in valid_ids:
             try:
-                # 🛠️ STRATEGY: Directly resolve the peer.
+                # 🛠️ STRATEGY: Directly resolve the peer. 
                 # If the bot has ever seen the group, this succeeds.
                 await cls.bot.resolve_peer(cid)
 
@@ -190,13 +187,13 @@ class TgClient:
         """Broadcasts pulse to all critical channels to trigger auto-discovery for peers"""
         # 🔑 Step A: First Hydrate memory
         await cls.resolve_peers()
-
+        
         target_ids = [settings.TG_LOG_CHANNEL_ID, settings.TG_BACKUP_CHANNEL_ID]
         valid_ids = [i for i in target_ids if i and i != 0]
 
         # Fetch current mode for the message
         mode = os.getenv("WORKER_MODE", "BOT").upper()
-
+        
         for cid in valid_ids:
             try:
                 text=(
@@ -204,7 +201,7 @@ class TgClient:
                     f"┌ {'—' * 12}\n"
                     f"├ <b>Name</b>: @{cls.bot.me.username}\n"
                     f"├ <b>Node</b>: <code>{node_name}</code>\n"
-                    f"├ <b>Mode</b>: <code>{mode}</code>\n"
+                    f"├ <b>Mode</b>: <code>{mode}</code>\n"  
                     f"└ <b>Storage</b>: {'RAM' if settings.USE_IN_MEMORY_SESSION else 'DISK'}"
                     f"{' (Premium)' if cls.IS_PREMIUM_USER else ''}"
                 )
@@ -218,17 +215,17 @@ class TgClient:
                 logger.info(f"✅ Peer Probe successful for {cid} from {node_name}")
             except Exception as e:
                 # We catch it so the container doesn't restart, allowing for manual debugging
-                logger.error(f"❌ Failed to seed Peer {cid} from {node_name}: {e}")
+                logger.error(f"❌ Failed to seed Peer {cid} from {node_name}: {e}") 
 
     @classmethod
     async def get_client(cls, user_required=False):
         """Priority Router: Returns Identity based on WORKER_MODE"""
         mode = os.getenv("WORKER_MODE", "BOT").upper()
-
+        
         # 🤖 BOT PRIORITY
         if mode == "BOT":
             return cls.bot
-
+        
         # 👤 USER PRIORITY
         if cls.user:
             return cls.user
@@ -238,9 +235,9 @@ class TgClient:
     async def stop(cls):
         async with cls._lock:
             tasks = []
-            if cls.bot:
+            if cls.bot: 
                 tasks.append(cls.bot.stop())
-            if cls.user:
+            if cls.user: 
                 tasks.append(cls.user.stop())
             if cls.helper_bots:
                 tasks.extend([h.stop() for h in cls.helper_bots.values()])

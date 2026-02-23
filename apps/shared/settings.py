@@ -1,15 +1,15 @@
-# apps/shared/settings.py
+# apps/shared/settings.py 
+import os
+from pydantic import Field
 from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 class AppSettings(BaseSettings):
     """
     SINGLE SOURCE OF TRUTH (Production Configuration)
-
-    This validates your .env file on startup.
-    If a required variable is missing, the App/Worker will CRASH immediately
+    
+    This validates your .env file on startup. 
+    If a required variable is missing, the App/Worker will CRASH immediately 
     (Fail Fast principle), preventing silent errors later.
     """
 
@@ -17,26 +17,26 @@ class AppSettings(BaseSettings):
     # 🌍 ENVIRONMENT CONTEXT
     # ==========================================
     MODE: str = "PROD"  # Options: "DEV" (Debug on) or "PROD" (Secure)
-    DOMAIN_NAME: str = "shadow-systems.xyz"  # Used for Magic Links & Redirects
+    DOMAIN_NAME: str = "shadow-systems.xyz" # Used for Magic Links & Redirects
 
     # ==========================================
     # 🗝️ TELEGRAM IDENTITY (The Keys)
     # ==========================================
     # Application credentials from my.telegram.org
-    TG_API_ID: int
+    TG_API_ID: int 
     TG_API_HASH: str
-
+    
     # Bots (Tokens from @BotFather)
-    TG_BOT_TOKEN: str  # For Manager (Admin Interface)
-    TG_WORKER_BOT_TOKEN: str  # For Worker (in Safe Mode)
-    TG_STREAM_BOT_TOKEN: str  # For Stream Engine (Generic)
-
+    TG_BOT_TOKEN: str       # For Manager (Admin Interface)
+    TG_WORKER_BOT_TOKEN: str # For Worker (in Safe Mode)
+    TG_STREAM_BOT_TOKEN: str # For Stream Engine (Generic)
+    
     # User Identity (MTProto High Speed)
     # This string allows us to clone the Worker session without OTP
-    TG_SESSION_STRING: str | None = None
-
+    TG_SESSION_STRING: Optional[str] = None
+    
     # Super Admin (YOU) - Bypass all checks
-    TG_OWNER_ID: int
+    TG_OWNER_ID: int 
 
     # ==========================================
     # 📡 CHANNEL MAPPING (The Warehouse)
@@ -50,8 +50,8 @@ class AppSettings(BaseSettings):
     # ==========================================
     # 💾 DATABASES (Persistence)
     # ==========================================
-    MONGO_URL: str  # Atlas Connection String
-    REDIS_URL: str  # Upstash/Redis Connection String
+    MONGO_URL: str # Atlas Connection String
+    REDIS_URL: str # Upstash/Redis Connection String
 
     # ==========================================
     # 🔒 SECURITY & ENCRYPTION
@@ -62,62 +62,53 @@ class AppSettings(BaseSettings):
     SECURE_LINK_SECRET: str
     # API Handshake Header (Backend <-> Frontend)
     # Must match "X-Shadow-Secret" header
-    API_SECRET_KEY: str = "unsafe_default"
+    API_SECRET_KEY: str = "unsafe_default" 
 
     # ==========================================
     # 🔌 FEATURE FLAGS (Toggles)
     # ==========================================
     # If True: Worker generates 30s sample. False: Save CPU.
-    GENERATE_SAMPLES: bool = True
-
+    GENERATE_SAMPLES: bool = True 
+    
     # Branding String for filenames (e.g. "[ShadowSystems]")
     FILE_BRANDING_TAG: str = "[ShadowSystem]"
-
-    # --- WZML-X Compat Variables ---
-    DEBRID_LINK_API: Optional[str] = None
-    INSTADL_API: Optional[str] = None
-    FILELION_API: Optional[str] = None
-    STREAMWISH_API: Optional[str] = None
-    DISABLE_TORRENTS: bool = False
-    TORRENT_TIMEOUT: int = 0
-
+    
     # ==========================================
     # 🛡️ QUEUE & LIMITS (Shadow-MLB)
     # ==========================================
-    ENABLE_USER_LIMITS: bool = False  # set True for public launch
+    ENABLE_USER_LIMITS: bool = False # set True for public launch
     MAX_TASKS_PER_USER: int = 3
     MAX_TOTAL_TASKS: int = 10
-    STATUS_UPDATE_INTERVAL: int = 6  # Seconds
+    STATUS_UPDATE_INTERVAL: int = 6 # Seconds
 
     # --- HANDSHAKE & PERSISTENCE ---
     # Default is True for Cloud IDEs (Dev), set to False in Production for .session files
-    USE_IN_MEMORY_SESSION: bool = True
+    USE_IN_MEMORY_SESSION: bool = True  
 
     # Swarm/Handshake config (From WZML logic)
-    HELPER_TOKENS: str | None = None  # Format: "token1 token2 token3"
+    HELPER_TOKENS: Optional[str] = None # Format: "token1 token2 token3"
     DOWNLOAD_DIR: str = "/app/downloads"
-    COOKIES_FILE_PATH: str = "/app/cookies.txt"
-
+    
     # Mirror specific logic
     IS_PREMIUM_USER: bool = False
-    MAX_SPLIT_SIZE: int = 2097152000  # 2GB
+    MAX_SPLIT_SIZE: int = 2097152000 # 2GB
 
     # ==========================================
     # 🎥 3RD PARTY INTEGRATIONS
     # ==========================================
     # Metadata Source (TheMovieDB v3 API Key)
     TMDB_API_KEY: str
-
+    
     # Monetization (Ads)
-    ADSTERRA_PID: str | None = None
-    SHORTENER_API_TOKEN: str | None = None
+    ADSTERRA_PID: Optional[str] = None
+    SHORTENER_API_TOKEN: Optional[str] = None
 
     # ==========================================
     # 🔗 MIRROR / DAISY-CHAIN KEYS
     # ==========================================
-    PIXELDRAIN_API_KEY: str | None = None
-    VIDHIDE_API_KEY: str | None = None
-
+    PIXELDRAIN_API_KEY: Optional[str] = None
+    VIDHIDE_API_KEY: Optional[str] = None
+    
     # ==========================================
     # 🛠️ CONFIG LOADERS
     # ==========================================
@@ -126,10 +117,9 @@ class AppSettings(BaseSettings):
         # 'ignore' means: If .env has extra keys (trash), don't crash.
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
-        case_sensitive=True,
+        extra="ignore", 
+        case_sensitive=True 
     )
-
 
 # Create singleton instance
 settings = AppSettings()

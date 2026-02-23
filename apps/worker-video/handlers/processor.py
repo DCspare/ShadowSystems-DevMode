@@ -1,8 +1,9 @@
 # apps/worker-video/handlers/processor.py
-import asyncio
+import os
+import math
 import json
 import logging
-import os
+import asyncio
 
 logger = logging.getLogger("MediaProcessor")
 
@@ -15,7 +16,7 @@ class MediaProcessor:
     1. Deep Inspection: Subtitles, Audio Tracks, Resolution.
     2. Asset Generation: Quality Screenshots, Verification Samples.
     """
-
+    
     def __init__(self):
         # We assume 'ffmpeg' and 'ffprobe' are in the system PATH
         # (Verified: They are installed in the Dockerfile)
@@ -30,23 +31,23 @@ class MediaProcessor:
             return {}
 
         cmd = [
-            "ffprobe",
-            "-v", "quiet",
-            "-print_format", "json",
-            "-show_streams",
+            "ffprobe", 
+            "-v", "quiet", 
+            "-print_format", "json", 
+            "-show_streams", 
             "-show_format",
             file_path
         ]
-
+        
         try:
             # 1. Execute FFprobe
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
+                *cmd, 
+                stdout=asyncio.subprocess.PIPE, 
                 stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
-
+            
             if process.returncode != 0:
                 logger.error(f"FFprobe Non-Zero: {stderr.decode()}")
                 # Fallback to defaults
@@ -57,7 +58,7 @@ class MediaProcessor:
             data = json.loads(stdout)
             format_info = data.get("format", {})
             all_streams = data.get("streams", [])
-
+            
             # 3. Video Stats
             video_stream = next((s for s in all_streams if s["codec_type"] == "video"), {})
 
@@ -83,10 +84,10 @@ class MediaProcessor:
 
                     # Critical for mpv/artplayer Selection
                     subtitles.append({
-                        "index": int(track.get("index", 0)),
+                        "index": int(track.get("index", 0)), 
                         "lang": display_title,  # Store the readable title
                         "code": lang_code    # Store the iso code
-                    })
+                    }) 
 
             # 5. Extract Audio (robust parsing)
             audio_tracks = []
@@ -97,7 +98,7 @@ class MediaProcessor:
                     # Code: und -> Title? -> "unk"
                     code = tags.get("language", "und")
                     title = tags.get("title", "")
-
+                    
                     # Garbage Filter for "Track 1"
                     if code == "und" and title:
                         if any(x in title.lower() for x in ['track', 'sound', 'stereo']):
@@ -106,14 +107,14 @@ class MediaProcessor:
                             code = title[:3] # Use first 3 chars of title as makeshift code
 
                     audio_tracks.append({
-                        "index": int(track.get("index", 0)),
-                        "code": code if len(code) < 10 else "unk",
-                        "codec": track.get("codec_name", "aac"),
+                        "index": int(track.get("index", 0)), 
+                        "code": code if len(code) < 10 else "unk", 
+                        "codec": track.get("codec_name", "aac"), 
                         "channels": float(track.get("channels", 2.0))
                     })
 
             logger.info(f"🔍 PROBED: {width}x{height} {'(10-bit)' if is_10bit else ''}, {len(subtitles)} subs, {len(audio_tracks)} audio, {duration}s")
-
+            
             return {
                 "width": width,
                 "height": height,
@@ -128,7 +129,7 @@ class MediaProcessor:
             logger.error(f"Probe Execution Error: {e}")
             # Return safe zeros so leech.py doesn't crash on format string
             return {
-                "width": 0, "height": 0, "size_bytes": 0,
+                "width": 0, "height": 0, "size_bytes": 0, 
                 "duration": 0.0, "subtitles": [], "audio": []
             }
 
@@ -137,21 +138,21 @@ class MediaProcessor:
         Generates 3 evenly spaced JPG screenshots for the Website Gallery.
         returns: List of local file paths.
         """
-        if duration < 10: return []
+        if duration < 10: return [] 
 
         paths = []
         base_name = os.path.splitext(file_path)[0]
 
         # Calculate timestamps (15%, 50%, 85%)
         percentages = [0.15, 0.50, 0.85]
-
+        
         # Limit to 3 max to save upload bandwidth
         if count != 3: percentages = [0.50]
 
         for i, pct in enumerate(percentages):
             timestamp = duration * pct
             out_file = f"{base_name}_screen_{i+1}.jpg"
-
+            
             # Command: Fast Seek -> Take 1 Frame -> Save as JPG High Quality
             cmd = [
                 "ffmpeg", "-y",
@@ -161,12 +162,12 @@ class MediaProcessor:
                 "-q:v", "2", # High Quality
                 out_file
             ]
-
+            
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
             )
             await proc.wait()
-
+            
             if os.path.exists(out_file):
                 paths.append(out_file)
 
