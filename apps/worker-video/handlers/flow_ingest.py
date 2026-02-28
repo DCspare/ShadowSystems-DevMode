@@ -142,7 +142,6 @@ class MediaLeecher:
         trigger_msg_id: str = None,
         user_tag: str = "User",
         name_hint: str = "",
-        swarm_idx=None,  # Track which bot we use
     ):
         # SAFETY INIT: Variables must exist before TRY block
         self.current_task_id = task_id
@@ -168,11 +167,6 @@ class MediaLeecher:
                 if is_killed:
                     logger.info(f"🛑 Kill signal detected for {task_id}. Aborting.")
                     raise Exception("TASK_CANCELLED_BY_USER")
-
-                # PICK SWARM CLIENT
-                # Instead of self.client, we use a helper bot
-                upload_client, swarm_idx = await TgClient.get_swarm_client()
-                logger.info(f"🐝 Swarm Selection: Using Helper {swarm_idx or 'Main'}")
 
                 # Update status to 'uploading'
                 await self.redis.hset(f"task_status:{task_id}", "status", "uploading")
