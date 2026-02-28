@@ -46,6 +46,7 @@ SHADOW-SYSTEMS (Root)
 │   │   ├── requirements.txt            # Python dependencies for the manager service
 │   ├── shared/                         # Common logic shared across all Python services
 │   │   ├── ext_utils/                  # Extended utility functions
+│   │   │   ├── buttons_build.py        # Logic for Telegram Inline Buttons
 │   │   │   ├── exceptions.py           # Custom exception definitions
 │   │   │   ├── help_messages.py        # Static strings for Telegram help commands
 │   │   │   ├── links_utils.py          # URL parsing and link validation logic
@@ -84,7 +85,7 @@ SHADOW-SYSTEMS (Root)
 │   ├── worker-manga/                   # Specialized worker for manga processing
 │   │   └── handlers/                   # Manga-specific task handlers
 │   └── worker-video/                   # High-performance video processing worker
-│       ├── downloads/                  # Temporary storage for active downloads
+│       ├── downloads/                  # Temporary storage for active downloads sub-directories
 │       ├── handlers/                   # Task-specific logic
 │       │   ├── listeners/              # Protocol-specific listeners
 │       │   │   └── task_listener.py    # Logic for listening to task queues
@@ -100,7 +101,10 @@ SHADOW-SYSTEMS (Root)
 │       │   ├── downloader.md           # [DEPRECATED] (Functionality moved to engines/)
 │       │   ├── flow_ingest.py          # Main worker task pipeline (DL -> Process -> Upload)
 │       │   ├── processor.py            # Video processing (FFmpeg, thumbnails, metadata)
+│       │   ├── recovery_handler.py     # Handles tasks after worker restarts
 │       │   └── status_manager.py       # Telegram status update orchestration
+│       ├── services/                   # New logic layer
+│       │   └── metadata_service.py     # Centralized Jikan/TMDB orchestrator
 │       ├── cookies.txt                 # Scraper auth cookies
 │       ├── Dockerfile                  # Builds the video worker image
 │       ├── entrypoint.sh               # Environment setup and startup script
@@ -347,5 +351,5 @@ for all Hurdles check: [Survivors Log](Survivors-Log.md)
 
 ---------
 
-*Last Updated: 23-02-2026*
-*Time: 12:09PM*
+*Last Updated: 28-02-2026*
+*Time: 12:44PM*
