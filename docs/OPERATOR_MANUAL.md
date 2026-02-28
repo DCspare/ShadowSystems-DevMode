@@ -389,7 +389,7 @@ Used to forcefully remove an entry if the UI is inaccessible.
 curl -X DELETE http://localhost:8080/api/library/delete/106379 \
   -H "X-Shadow-Secret: shadow_super_secret_dev_key"
 ```
-#### 2a. Nuking a whole Movie Entry (DELETE)
+#### 2b. Nuking a whole Movie Entry (remove_file)
 *Goal: Remove a file link without deleting the movie meta.*
 
 You need a `tmdb_id` that exists in your database.
@@ -397,7 +397,7 @@ You need a `tmdb_id` that exists in your database.
 ```bash
 curl "http://localhost:8080/api/library/list?limit=1"
 ```
-2. Note the `tmdb_id` and the `telegram_id` inside the `files` array.
+2. Note Down the `tmdb_id` and the `telegram_id` inside the `files` array.
 3. Run the deletion:
 ```bash
 # Replace 12345 with real TMDB ID

@@ -1,11 +1,10 @@
-# apps/shared/utils.py 
-import time
-import string
-import random
-import psutil
+# apps/shared/utils.py
 import logging
-from html import escape
-from typing import List
+import random
+import string
+
+import psutil
+
 from shared.settings import settings
 
 logger = logging.getLogger("KernelUtils")
@@ -20,7 +19,7 @@ def generate_short_id(length: int = 7) -> str:
 
 class ProgressManager:
     """Standardized UI math for the Shadow Systems V2 protocol."""
-    
+
     @staticmethod
     def get_readable_file_size(size_in_bytes) -> str:
         if not size_in_bytes: return "0B"
@@ -48,7 +47,7 @@ class ProgressManager:
 
 class SystemMonitor:
     """Captures hardware stats matching MLTB standard."""
-    
+
     @staticmethod
     def get_stats(download_dir: str = "/app/downloads"):
         cpu = psutil.cpu_percent()

@@ -1,32 +1,38 @@
-# apps/worker-video/worker.py 
+# apps/worker-video/worker.py
+import asyncio
+import logging
 import os
+import random
+import shutil
+import signal
+import subprocess
 import sys
 import time
-import asyncio
-import signal
-import logging
-import subprocess
-import shutil 
+
+from shared.ext_utils.button_build import ButtonMaker
+
 sys.path.append("/app/shared")
-from redis.asyncio import Redis
-from shared.tg_client import TgClient
-from shared.database import db_service
-from pyrogram.handlers import MessageHandler
-from shared.settings import settings
-from pyrogram import Client, filters
-from handlers.downloader import downloader
-from handlers.flow_ingest import MediaLeecher
 from motor.motor_asyncio import AsyncIOMotorClient
-from shared.registry import task_dict, task_dict_lock, MirrorStatus
+from redis.asyncio import Redis
+
+from handlers.download_manager import DownloadManager
+from handlers.flow_ingest import MediaLeecher
+from handlers.listeners.task_listener import TaskListener
 from handlers.status_manager import StatusManager
+from shared.database import db_service
+from shared.registry import MirrorStatus, task_dict, task_dict_lock
+from shared.settings import settings
+from shared.tg_client import TgClient
 
 TgClient.setup_logging()
 logger = logging.getLogger("VideoWorker")
+
 
 class VideoWorker:
     """
     Main Service for StreamVault Video Processing.
     """
+
     def __init__(self):
         self.app = None
         self.db = None
@@ -34,13 +40,16 @@ class VideoWorker:
         self.leecher = None
         self.is_running = True
         self.shutdown_event = asyncio.Event()
+        self.semaphore = asyncio.Semaphore(settings.MAX_TOTAL_TASKS)
 
         # 🔑 DYNAMIC SESSION NAME
         # Defaults to 'worker_video_default' if SESSION_FILE is missing in .env
         self.session_name = os.getenv("SESSION_FILE", "worker_video_default")
         self.mode = os.getenv("WORKER_MODE", "BOT").upper()
-        
-        logger.info(f"🆔 Node Initialized | Mode: {self.mode} | Session: {self.session_name}")
+
+        logger.info(
+            f"🆔 Node Initialized | Mode: {self.mode} | Session: {self.session_name}"
+        )
 
         try:
             self.log_channel = int(settings.TG_LOG_CHANNEL_ID)
@@ -48,19 +57,25 @@ class VideoWorker:
             self.log_channel = 0
 
     def clean_slate(self):
-        """🧹 WIPER: Removes all stale files from previous crashes"""
-        dl_dir = "/app/downloads"
+        """🧹 WIPER: Removes all stale files from crash but ignores config/cookies"""
+        dl_dir = settings.DOWNLOAD_DIR
+        cookie_name = os.path.basename(settings.COOKIES_FILE_PATH)  # Get 'cookies.txt'
+
         logger.info(f"🧹 Cleaning slate at: {dl_dir}")
         if os.path.exists(dl_dir):
             try:
                 # Remove all files in the directory
                 for filename in os.listdir(dl_dir):
+                    # 🛡️ EXCLUSION LOGIC
+                    if filename == cookie_name:
+                        continue
+
                     file_path = os.path.join(dl_dir, filename)
                     if os.path.isfile(file_path) or os.path.islink(file_path):
                         os.unlink(file_path)
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
-                logger.info("✅ Downloads folder purged.")
+                logger.info("✅ Downloads folder purged (Cookies preserved).")
             except Exception as e:
                 logger.warning(f"Failed to clean download folder: {e}")
         else:
@@ -69,7 +84,7 @@ class VideoWorker:
     def start_aria2_daemon(self):
         """Starts the aria2c binary."""
         logger.info("🚀 Launching Aria2 RPC Daemon...")
-        
+
         # FIX: Force explicit path relative to root
         dl_path = "/app/downloads"
         if not os.path.exists(dl_path):
@@ -79,23 +94,23 @@ class VideoWorker:
             command = [
                 "aria2c",
                 "--enable-rpc",
-                "--rpc-listen-all=false", 
+                "--rpc-listen-all=false",
                 "--rpc-allow-origin-all",
                 f"--dir={dl_path}",
-                "--file-allocation=none", # Stop pre-allocating disk space (Fixes Docker Error)
-                "--disk-cache=0", # Disable RAM caching (Prevent buffer lag)
-                "--max-connection-per-server=4",    # Keep connections low to avoid Google/Host blocks
+                "--file-allocation=none",  # Stop pre-allocating disk space (Fixes Docker Error)
+                "--disk-cache=0",  # Disable RAM caching (Prevent buffer lag)
+                "--max-connection-per-server=4",  # Keep connections low to avoid Google/Host blocks
                 "--min-split-size=10M",
                 "--dht-listen-port=6881",
                 "--listen-port=6881",
                 "--bt-enable-lpd=true",  # Local Peer Discovery
                 "--enable-dht=true",
-                "--user-agent=Transmission/3.00", # Sometimes masks bot traffic
-                "--quiet"
+                "--user-agent=Transmission/3.00",  # Sometimes masks bot traffic
+                "--quiet",
             ]
             self.aria2_proc = subprocess.Popen(command)
             time.sleep(2)
-            
+
             if self.aria2_proc.poll() is None:
                 logger.info("✅ Aria2 Daemon is running.")
             else:
@@ -108,27 +123,25 @@ class VideoWorker:
     async def init_services(self):
         # 0. Safety Cleanup
         self.clean_slate()
-        
+
         # 1. DB (Persistence Layer)
-        await db_service.connect() # Ensure kernel DB is connected for Shared Registry
+        await db_service.connect()  # Ensure kernel DB is connected for Shared Registry
         mongo_client = AsyncIOMotorClient(settings.MONGO_URL)
         self.db = mongo_client["shadow_systems"]
         self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-        # Initialize Downloader with THE BRIDGE
-        self.start_aria2_daemon()
-        await downloader.initialize(
-            redis=self.redis
-        )
+        # Start Primary Identity (Added 'plugins' to load the recovery handler)
+        plugins_config = dict(root="handlers")
 
         # 1. Start Primary Identity (1st Priority)
         started = await TgClient.start_bot(
-            name=self.session_name, 
-            token_override=settings.TG_WORKER_BOT_TOKEN
+            name=self.session_name,
+            token_override=settings.TG_WORKER_BOT_TOKEN,
+            plugins=plugins_config,
         )
 
         # 2. Try User (Fallback start_user)
-        await TgClient.start_user()     # For high-speed user transfers
+        await TgClient.start_user()  # For high-speed user transfers
 
         if not started and not TgClient.user:
             logger.critical("❌ No valid identity found (Bot or User). Exiting.")
@@ -142,14 +155,57 @@ class VideoWorker:
         self.leecher = MediaLeecher(self.app, self.db, self.redis)
 
         # 4. Handshake Pulse
-        await TgClient.send_startup_pulse(f"WORKER-{self.session_name.upper()}") # 🛰️ Visible Handshake check
+        await TgClient.send_startup_pulse(
+            f"WORKER-{self.session_name.upper()}"
+        )  # 🛰️ Visible Handshake check
 
-        await asyncio.sleep(2) 
+        await asyncio.sleep(2)
+
+        # STARTUP RECOVERY
+        await self.reconcile_incomplete_tasks()
 
         # 5. Start Status Manager Heartbeat
         self.status_mgr = StatusManager(self.app)
-        asyncio.create_task(self.status_mgr.update_heartbeat()) # Background Loop
-        
+        asyncio.create_task(self.status_mgr.update_heartbeat())  # Background Loop
+
+    async def reconcile_incomplete_tasks(self):
+        """WZML-X Style: Checks MongoDB for tasks that never finished."""
+        try:
+            logger.info("🔍 Checking for incomplete tasks from previous session...")
+            incompletes = await self.db.incomplete_tasks.find().to_list(length=100)
+
+            if not incompletes:
+                logger.info("✅ No incomplete tasks found.")
+                return
+
+            # Build WZML-X Recovery Menu
+            buttons = ButtonMaker()
+            buttons.data_button("♻️ Resume All", "resume_all_tasks")
+            buttons.data_button("🗑️ Clear All", "clear_incomplete_tasks")
+            buttons.data_button("🔍 Select Tasks", "select_incomplete_tasks")
+
+            msg = (
+                f"🚩 <b>Incomplete Tasks Detected!</b>\n"
+                f"System found <code>{len(incompletes)}</code> tasks that were interrupted by a crash or restart.\n\n"
+                f"<i>What would you like to do?</i>"
+            )
+
+            # ✅ FIX: Send to Log Channel instead of Owner DM to avoid PEER_ID_INVALID
+            # Also added a try/except so a notification failure doesn't crash the worker
+            try:
+                await self.app.send_message(
+                    chat_id=settings.TG_LOG_CHANNEL_ID,
+                    text=msg,
+                    reply_markup=buttons.build_menu(2),
+                )
+                logger.info("📢 Recovery notification sent to Log Channel.")
+            except Exception as notify_err:
+                logger.error(f"⚠️ Could not send recovery alert: {notify_err}")
+                # We don't 'return' here because we still want the worker to function
+
+        except Exception as e:
+            logger.error(f"❌ Error during task reconciliation: {e}")
+
     async def stop_services(self):
         """🛑 GRACEFUL SHUTDOWN ROUTINE"""
         if not self.is_running:
@@ -157,15 +213,15 @@ class VideoWorker:
 
         logger.info("🛑 Shutdown Signal Received. Cleaning up...")
         self.is_running = False
-        
+
         # 1. Kill Aria2
-        if hasattr(self, 'aria2_proc'):
+        if hasattr(self, "aria2_proc"):
             try:
                 self.aria2_proc.terminate()
                 self.aria2_proc.wait(timeout=5)
             except Exception:
                 self.aria2_proc.kill()
-        
+
         # 2. Stop Pyrogram (THIS SAVES THE HANDSHAKE)
         try:
             logger.info("⏳ Saving Pyrogram Session (merging journal)...")
@@ -174,168 +230,172 @@ class VideoWorker:
         except Exception as e:
             logger.error(f"Error during TgClient shutdown: {e}")
 
-    async def task_watcher(self):
-        """Watch Redis"""
-        logger.info("Task Watcher started. Listening to 'queue:leech'...")
-        while self.is_running:
-            # 1. DEFENSIVE INITIALIZATION (Fixes UnboundLocalError)
-            task_id = None
-            tmdb_id = None
-            user_id = "0"
-            origin_chat_id = settings.TG_LOG_CHANNEL_ID
-            trigger_msg_id = None
-            user_tag = "User"
+    async def process_task(self, payload):
+        """The 'Worker Lane': This runs a single task from start to finish."""
+        # 1. PRE-INITIALIZE (Solves UnboundLocalError forever)
+        task_id = payload.split("|")[0]
+        local_path = None
+        user_id = "0"
+        listener = None
+
+        # A Semaphore is like a bouncer. Only 'MAX_TOTAL_TASKS' can pass this line at once.
+        async with self.semaphore:
             try:
-                task = await self.redis.brpop("queue:leech", timeout=1) 
-                if not task: 
-                    continue # This allows the loop to check 'is_running' every 1 second
+                # 2. RECORD IN MONGODB (The Safety Net)
+                await self.db.incomplete_tasks.update_one(
+                    {"_id": task_id},
+                    {"$set": {"payload": payload, "added_at": time.time()}},
+                    upsert=True,
+                )
 
-                if task:
-                    payload = task[1]
-                    logger.info(f"Consumed task: {payload}")
-                    try:
-                        # FORMAT: 0:task_id | 1:tmdb_id | 2:url | 3:type | 4:name | 5:user_id | 6:origin_chat_id | 7:user_tag | 8:trigger_msg_id
-                        parts = payload.split("|")
-                        if len(parts) < 9: 
-                            logger.error("Malformed payload received."); continue   
+                # Use a limited split (8) to ensure that if the URL contains '|',
+                # it doesn't break the rest of the indices.
+                parts = payload.split("|", 8)
 
-                        task_id = parts[0]
-                        tmdb_id = parts[1]
-                        raw_url = parts[2]
-                        type_hint = parts[3] if len(parts) > 3 else "auto"
-                        name_hint = parts[4] if len(parts) > 4 else ""
-                        user_id = parts[5] if len(parts) > 5 else "0"
-                        origin_chat_id = parts[6] if len(parts) > 6 else settings.TG_LOG_CHANNEL_ID
-                        # Capture user_tag (fallback to 0 if old payload)
-                        user_tag = parts[7] if len(parts) > 7 else "0"
-                        trigger_msg_id = parts[8] if len(parts) > 8 else None
+                # CLEANING: Strip hidden whitespace from every part to ensure .isdigit() works
+                parts = [p.strip() for p in parts]
 
-                        # Update Status to 'Downloading'
-                        status_key = f"task_status:{task_id}"
+                # Ensure we have all 9 parts
+                while len(parts) < 9:
+                    parts.append("")
+                (
+                    task_id,
+                    tmdb_id,
+                    raw_url,
+                    type_hint,
+                    name_hint,
+                    user_id,
+                    origin_chat_id,
+                    user_tag,
+                    trigger_msg_id,
+                ) = parts
 
-                        # 🛠️ DYNAMIC ENGINE DETECTION
-                        raw_url = parts[2]
-                        if raw_url.startswith("magnet") or ".torrent" in raw_url:
-                            engine_name = "Aria2 v1.36.0"
-                        else:
-                            engine_name = "YT-DLP Native"
+                # LOG THE FULL PAYLOAD FOR DEBUGGING
+                logger.info(
+                    f"📥 Processing: ID={task_id} | TMDB={tmdb_id} | Name_Hint={name_hint} | User={user_tag}"
+                )
 
-                        # ✅ REGISTER TASK IN GLOBAL UI
-                        async with task_dict_lock:
-                            task_dict[task_id] = {
-                                "task_id": task_id,
-                                "name": name_hint or f"TMDB {tmdb_id}",
-                                "progress": 0,
-                                "status": MirrorStatus.STATUS_QUEUED,
-                                "user_tag": user_tag,
-                                "engine": engine_name,
-                                "processed": "0B",
-                                "size": "0B",
-                                "speed": "0B/s",
-                                "eta": "Calculating...",
-                                "origin_msg_id": trigger_msg_id # Stored for cleanup
-                            }
+                # Sanitize IDs: Convert to int only if it's a pure digit string
+                tmdb_id = int(tmdb_id) if tmdb_id and tmdb_id.isdigit() else 0
 
-                        # Update Status to 'Downloading' (Redis side)
-                        await self.redis.hset(f"task_status:{task_id}", "status", "downloading")
-                        try: 
-                            # 1. Download
-                            target_info = downloader.get_direct_url(raw_url)
+                # origin_chat_id must handle the '-' sign for channel IDs
+                origin_chat_id = (
+                    int(origin_chat_id)
+                    if origin_chat_id and origin_chat_id.replace("-", "").isdigit()
+                    else settings.TG_LOG_CHANNEL_ID
+                )
 
-                            if not target_info:
-                                logger.error(f"❌ Could not resolve URL: {raw_url}")
-                                # Cleanup registry on error
-                                async with task_dict_lock: task_dict.pop(task_id, None)
-                                continue # Skip to next task
+                # 3. Initialize Listener
+                listener = TaskListener(
+                    task_id=task_id,
+                    url=raw_url,
+                    tmdb_id=tmdb_id,
+                    user_id=user_id,
+                    user_tag=user_tag,
+                    origin_chat_id=int(origin_chat_id),
+                    trigger_msg_id=trigger_msg_id,
+                    type_hint=type_hint,
+                    name_hint=name_hint,
+                )
 
-                            local_path = await downloader.start_download(target_info, task_id=task_id)
+                # 4. Launch Download Engine
+                manager = DownloadManager(self.redis)
+                await manager.start(listener)
 
-                        except Exception as dl_err:
-                            logger.error(f"Download Phase Failed: {dl_err}")
-                            # ✅ CLEANUP ON DL FAIL
-                            async with task_dict_lock: task_dict.pop(task_id, None)
-                            continue
-                        
-                        if local_path and os.path.exists(local_path):
-                            
-                            # Optional: Rename before process
-                            if name_hint:
-                                dir_name = os.path.dirname(local_path)
-                                ext = os.path.splitext(local_path)[1]
-                                new_filename = f"{name_hint}{ext}"
-                                new_path = os.path.join(dir_name, new_filename)
-                                
-                                logger.info(f"✏️ Renaming: {os.path.basename(local_path)} -> {new_filename}")
-                                os.rename(local_path, new_path)
-                                local_path = new_path
-                                logger.info(f"Renamed hint applied: {new_filename}")
+                # 5. SMART WAIT: Wait for 'is_finished' flag or 'is_cancelled'
+                while not listener.is_finished:
+                    if listener.is_cancelled or await self.redis.get(
+                        f"kill_signal:{task_id}"
+                    ):
+                        listener.is_cancelled = True
+                        break
+                    await asyncio.sleep(2)
 
-                            # 2. Upload with Hint
-                            await self.leecher.upload_and_sync(
-                                file_path=local_path, 
-                                tmdb_id=int(tmdb_id),
-                                type_hint=type_hint,
-                                task_id=task_id,
-                                user_id=user_id,
-                                origin_chat_id=int(origin_chat_id),
-                                trigger_msg_id=trigger_msg_id,
-                                user_tag=user_tag
+                # 6. Upload Phase (If finished and not cancelled)
+                if listener.is_finished and not listener.is_cancelled:
+                    # Random jitter (0.1 to 1.5s) so they don't hit the DB/API at the exact same millisecond
+                    await asyncio.sleep(random.uniform(0.1, 1.5))
+                    logger.info(f"📤 Transitioning to Upload: {task_id}")
+
+                    # Force a 1-second sleep to ensure files are flushed to disk
+                    await asyncio.sleep(1)
+
+                    # WZML-X LOGIC: The file is simply the first file in the listener.dir
+                    files = os.listdir(listener.dir)
+                    if not files:
+                        raise Exception("Download directory is empty!")
+
+                    # Get the full path of the downloaded file
+                    local_path = os.path.join(listener.dir, files[0])
+
+                    if local_path and os.path.exists(local_path):
+                        # Update status to Uploading so users see it
+                        if listener.status_obj:
+                            listener.status_obj._upload_status = (
+                                MirrorStatus.STATUS_UPLOADING
                             )
 
-                            # 3. Clean
-                            if os.path.isfile(local_path):
-                                os.remove(local_path)
-                            logger.info(f"🗑️ Cleaned up: {local_path}")
-                        else:
-                            logger.error("Download ghosted.")
+                        await self.leecher.upload_and_sync(
+                            file_path=local_path,
+                            tmdb_id=int(tmdb_id),
+                            type_hint=type_hint,
+                            task_id=task_id,
+                            user_id=user_id,
+                            origin_chat_id=int(origin_chat_id),
+                            trigger_msg_id=trigger_msg_id,
+                            user_tag=user_tag,
+                            name_hint=name_hint,
+                        )
+                    else:
+                        raise Exception("Downloaded file disappeared or name mismatch.")
 
-                    except Exception as task_err:
-                        logger.error(f"❌ Task {task_id} Failed: {task_err}")
+                # 7. SUCCESS: DELETE FROM MONGODB
+                await self.db.incomplete_tasks.delete_one({"_id": task_id})
 
-                        # 🛠️ SYSTEMATIC FAILURE CLEANUP
-                        if self.redis:
-                            # 1. Update status to Failed in Redis
-                            await self.redis.hset(f"task_status:{task_id}", "status", "failed")
-                            # 2. Force expire the status so it clears from /status later
-                            await self.redis.expire(f"task_status:{task_id}", 300)
-                            # 3. IMPORTANT: Release the User's slot so they aren't blocked!
-                            if user_id != "0":
-                                limit_key = f"active_user_tasks:{user_id}"
-                                await self.redis.srem(limit_key, task_id)
-                                logger.info(f"🔓 Emergency Slot Release for {user_tag}")
-                        
-                        # ✅ Send a notification to the user about the failure
-                        try:
-                            error_message = str(task_err).replace('<', '').replace('>', '') # Sanitize
-                            await self.app.send_message(
-                                chat_id=int(origin_chat_id),
-                                text=(
-                                    f"❌ <b>Task Failed for {user_tag}</b>\n\n"
-                                    f"<b>Task ID:</b> <code>{task_id}</code>\n"
-                                    f"<b>Reason:</b> <pre>{error_message[:250]}</pre>\n\n"
-                                    f"The queue has been cleared and your slot has been released."
-                                )
-                            )
-                        except Exception as notify_err:
-                            logger.error(f"Failed to send failure notification: {notify_err}")
-
-                        await asyncio.sleep(2)
-                        continue # Move to the next task in queue
-
-            except asyncio.CancelledError:
-                # 🛠️ CRITICAL: Don't catch this as an "error". Raise it to exit the loop.
-                raise 
             except Exception as e:
-                # Catch actual errors (Redis timeout, malformed data, etc)
-                logger.error(f"Watcher Loop Error: {e}")
-                await asyncio.sleep(2)
+                logger.error(f"❌ Task {task_id} failed: {e}")
+                # Clean MongoDB and Redis status on known failure
+                await self.db.incomplete_tasks.delete_one({"_id": task_id})
+                await self.redis.delete(f"task_status:{task_id}")
+
+                # Notify user and CLEAR registry via the listener
+                if listener:
+                    await listener.on_error(str(e))
 
             finally:
-                        # ✅ MASTER PURGE: Ensure task is REMOVED from UI no matter what happened
-                        async with task_dict_lock:
-                            if task_id in task_dict:
-                                task_dict.pop(task_id, None)
-                                logger.info(f"🧹 Registry cleaned for {task_id}")
+                # 1. PHYSICAL CLEANUP (The Nuke)
+                if listener and os.path.exists(listener.dir):
+                    try:
+                        shutil.rmtree(listener.dir, ignore_errors=True)
+                    except:
+                        pass
+
+                # 2. MEMORY CLEANUP (The Double-Tap)
+                # Even if listener.on_error failed, we pop the dict here
+                async with task_dict_lock:
+                    if task_id in task_dict:
+                        task_dict.pop(task_id, None)
+
+                # 3. REDIS SLOT RELEASE
+                if user_id != "0":
+                    await self.redis.srem(f"active_user_tasks:{user_id}", task_id)
+
+                logger.info(f"🏁 Finalized cleanup for task: {task_id}")
+
+    async def task_watcher(self):
+        """The 'Ear': It pulls tasks from Redis and spawns them into parallel lanes."""
+        logger.info(f"🚀 Parallel Worker Online. Max Slots: {settings.MAX_TOTAL_TASKS}")
+        while self.is_running:
+            try:
+                task = await self.redis.brpop("queue:leech", timeout=1)
+                if task:
+                    payload = task[1]
+                    # We 'create_task' so the loop doesn't wait (ASYNC PARALLEL)
+                    asyncio.create_task(self.process_task(payload))
+            except Exception as e:
+                logger.error(f"Watcher Error: {e}")
+                await asyncio.sleep(2)
+
 
 async def main():
     worker = VideoWorker()
@@ -370,22 +430,23 @@ async def main():
     finally:
         # 🛠️ SYSTEMATIC TEARDOWN
         logger.info("📦 Beginning Systematic Teardown...")
-        
+
         # A. Stop Watcher
-        if 'watcher_task' in locals():
+        if "watcher_task" in locals():
             watcher_task.cancel()
             try:
                 await asyncio.wait_for(watcher_task, timeout=5)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # B. Run the shutdown routine (SQLite save)
         await worker.stop_services()
-        
+
         # C. Flush all logs and end
-        logger.info("💀 Shadow Worker Offline.")
+        logger.info("💤 Shadow Worker Offline.")
         # Ensure we exit even if background loops are hung
         sys.exit(0)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

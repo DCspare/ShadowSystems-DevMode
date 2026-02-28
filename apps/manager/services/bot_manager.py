@@ -1,18 +1,16 @@
-# apps/manager/services/bot_manager.py 
-import os 
+# apps/manager/services/bot_manager.py
 import logging
-from shared.tg_client import TgClient
-from pyrogram import Client
-from shared.settings import settings
 
-TgClient.setup_logging() 
+from shared.tg_client import TgClient
+
+TgClient.setup_logging()
 logger = logging.getLogger("BotManager")
 
 class ShadowManager:
     """
     Manager Bot Service (The Brain)
     Handles metadata ingestion and admin commands.
-    """  
+    """
     async def start(self):
         """Initializes and starts the Pyrogram Client"""
         logger.info("Starting Manager Bot...")
@@ -20,10 +18,10 @@ class ShadowManager:
         # Smart Plugin Loader
         # Tells Pyrogram to look in "handlers" folder for decorators
         plugins_config = dict(
-            root="handlers" 
+            root="handlers"
         )
-        
-         # 1. Initialize Identities (Bot vs User) 
+
+         # 1. Initialize Identities (Bot vs User)
         await TgClient.start_bot(name="manager_bot", plugins=plugins_config)
         await TgClient.start_user()
 
