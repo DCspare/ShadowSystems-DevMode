@@ -10,6 +10,7 @@ class TaskProgress:
     def __init__(self, total_size):
         self.total_size = total_size
         self.start_time = time.time()
+        self.last_update_time = time.time() # Track Last Activity
         self.last_checkpoint_size = 0
         self.last_checkpoint_time = self.start_time
         self.current_speed = 0
@@ -27,6 +28,7 @@ class TaskProgress:
         Calculates and returns the current speed in bytes/second.
         Returns a raw float, not a formatted string.
         """
+        self.last_update_time = time.time()
         now = time.time()
         interval = now - self.last_checkpoint_time
 

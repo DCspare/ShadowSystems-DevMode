@@ -1,12 +1,13 @@
 # apps/manager/DockerFile
 # Optimized for Oracle/Ampere (ARM64) and IDX
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
 
 # 1. System dependencies for Telegram/Encryption
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libc6-dev \
     ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -16,7 +17,8 @@ WORKDIR /app
 
 # 3. Install Dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 4. Copy Codebase
 COPY . .

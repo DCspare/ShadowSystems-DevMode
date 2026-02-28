@@ -37,7 +37,8 @@ class TgClient:
 
         # Reset and apply to root to stop Uvicorn/Pyrogram from making a mess
         root = logging.getLogger()
-        for h in root.handlers[:]: root.removeHandler(h)
+        for h in root.handlers[:]:
+            root.removeHandler(h)
         root.addHandler(handler)
         root.setLevel(logging.INFO)
 
@@ -83,7 +84,8 @@ class TgClient:
             return False
 
         async with cls._lock:
-            if cls.bot: return True
+            if cls.bot:
+                return True
             cls.bot = cls.create_pyro_client(name, bot_token=target_token, plugins=plugins)
             await cls.bot.start()
             cls.register_refresh_handler(cls.bot)

@@ -8,10 +8,11 @@ from shared.settings import settings
 
 logger = logging.getLogger("Metadata")
 
+
 class MetadataService:
     def __init__(self):
         # Fallback to os.getenv if settings object isn't fully loaded
-        self.api_key = getattr(settings, 'TMDB_API_KEY', os.getenv('TMDB_API_KEY'))
+        self.api_key = getattr(settings, "TMDB_API_KEY", os.getenv("TMDB_API_KEY"))
         self.base_url = "https://api.themoviedb.org/3"
 
     async def search_tmdb(self, query: str, media_type: str = "movie"):
@@ -30,5 +31,6 @@ class MetadataService:
                 if response.status != 200:
                     return None
                 return await response.json()
+
 
 metadata_service = MetadataService()

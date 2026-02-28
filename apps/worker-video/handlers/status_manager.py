@@ -44,6 +44,12 @@ class StatusManager:
             user_tag = escape(str(task._listener.user_tag))
             engine = task.engine
 
+            # STALL CHECK
+            if hasattr(task, "status_obj") and task.status_obj:
+                tracker = getattr(task.status_obj, "_tracker", None)
+                if tracker and (time.time() - tracker.last_update_time) > 45:
+                    t_status = f"STALLED ⚠️ ({t_status})"
+
             # Clean percentage for the bar
             try:
                 pct = float(progress_str.strip("%"))
@@ -72,8 +78,7 @@ class StatusManager:
         # Footer including System Health
         stats = SystemMonitor.get_stats()
         msg += "—" * 12 + "\n"
-        msg += f"💻 <b>CPU:</b> {stats['cpu']}%\n"
-        msg += f"🧠 <b>RAM:</b> {stats['mem']}%\n"
+        msg += f"💻 <b>CPU:</b> {stats['cpu']}% | 🧠 <b>RAM:</b> {stats['mem']}%\n"
         msg += f"💾 <b>FREE:</b> {stats['free']}\n"
         uptime_sec = int(time.time() - self.start_time)
         msg += f"⏱️ <b>UPTIME:</b> {ProgressManager.get_readable_time(uptime_sec)}"

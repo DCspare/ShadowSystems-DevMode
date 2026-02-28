@@ -1,7 +1,12 @@
 # manager/handlers/cmd_leech.py (formerly leech.py)
 import logging
+import shlex
 import sys
 import uuid
+
+from shared.registry import (
+    get_active_tasks_count,
+)
 
 sys.path.append("/app/shared")
 from pyrogram import Client, enums, filters
@@ -24,140 +29,152 @@ async def leech_command(client, message):
         # /leech http... 123 tv "The Night Manager S01E01"
         text = message.text
 
-        # 1. URL
-        parts = text.split(" ", 2)
-        if len(parts) < 2:
+        # 1. PARSE ARGUMENTS (Outside the logic block)
+        try:
+            all_args = shlex.split(text)
+        except ValueError:
+            all_args = text.split()  # Fallback for mismatched quotes
+
+        # 2. VALIDATE USAGE
+        if len(all_args) < 2:
             return await message.reply_text(
-                "<b>❌ Usage:</b> <code>/leech [URL] [TMDB_ID] [type] [name]</code>"
+                f"<pre>⚠️ Usage:</pre>\n"
+                f"{'—' * 12}\n"
+                f"<code>/leech [URL] [TMDB_ID] [type] \"[name]\"</code>\n\n"
+                f"<b>Example:</b> <code>/leech https://video-link.mp4 155 movie \"The Dark Knight\"</code>"
             )
-        url = parts[1]
+        url = all_args[1]
 
         # Default Params
         tmdb_id = "0"
         type_hint = "auto"
         name_hint = ""
 
-        # 2. Extract Options if present
-        if len(parts) > 2:
-            remaining = parts[2]
+        # 3. EXTRACT OPTIONS (ID, Type, or Name)
+        for arg in all_args[2:]:
+            if arg.isdigit():
+                tmdb_id = arg
+            elif arg.lower() in ["tv", "movie", "series", "anime"]:
+                type_hint = arg.lower()
+            else:
+                # Anything else (especially quoted strings) is the name_hint
+                name_hint = arg
 
-            # Logic: If starts with quotes, it's a name hint, otherwise ID
-            # Simple splitter by spaces
-            sub_args = remaining.split(" ")
+        # 4. QUEUE LOGIC
+        if not db_service.redis:
+            return await message.reply_text("❌ Redis Not Connected")
 
-            # Helper to check if string looks like an ID
-            if sub_args[0].isdigit():
-                tmdb_id = sub_args[0]
-                if len(sub_args) > 1:
-                    type_hint = sub_args[1]
+        user_id = message.from_user.id
+        origin_chat_id = message.chat.id  # <--- TRACK ORIGIN
+        trigger_msg_id = message.id  # <--- Store this to delete later
+        limit_key = f"active_user_tasks:{user_id}"
 
-                # Check for Name Hint (everything after type)
-                # Join remaining args and strip quotes
-                if len(sub_args) > 2:
-                    name_hint = " ".join(sub_args[2:]).strip('"')
-
-        # Queue Logic
-        if db_service.redis:
-            user_id = message.from_user.id
-            origin_chat_id = message.chat.id  # <--- TRACK ORIGIN
-            trigger_msg_id = message.id  # <--- Store this to delete later
-            limit_key = f"active_user_tasks:{user_id}"
-
-            # 1. Check Limits (Bypass if user is Owner OR Toggle is OFF)
-            if settings.ENABLE_USER_LIMITS and user_id != OWNER_ID:
-                active_count = await db_service.redis.scard(limit_key)
-                if active_count >= settings.MAX_TASKS_PER_USER:
-                    # Fetch IDs to show the user
-                    active_ids = await db_service.redis.smembers(limit_key)
-                    ids_str = ", ".join([f"<code>{i}</code>" for i in active_ids])
-                    return await message.reply_text(
-                        f"⚠️ <b>Limit Reached!</b>\n"
-                        f"You have <code>{active_count}</code> active tasks: {ids_str}\n\n"
-                        f"Please wait for them to finish or <code>/cancel</code> one to start a new task."
-                    )
-
-            # Prepare User Tag (Username or First Name)
-            user_tag = (
-                f"@{message.from_user.username}"
-                if message.from_user.username
-                else message.from_user.first_name
+        # GLOBAL LIMIT CHECK (Is the whole server full?)
+        active_total = await get_active_tasks_count()
+        if active_total >= settings.MAX_TOTAL_TASKS:
+            return await message.reply_text(
+                f"<pre>⚠️ <b>Server Busy!</b></pre>\n"
+                f"Total active tasks: <code>{active_total}/{settings.MAX_TOTAL_TASKS}</code>\n"
+                f"Your task is in the queue and will start automatically when a slot opens."
+                f"Check Status --> /status"
             )
 
-            # 2. Setup Task Identity
-            task_id = str(uuid.uuid4())[:8]  # Short unique ID
-            status_key = f"task_status:{task_id}"
+        # USER LIMIT CHECK (Bypass if user is Owner OR Toggle is OFF)
+        if settings.ENABLE_USER_LIMITS and user_id != OWNER_ID:
+            active_count = await db_service.redis.scard(limit_key)
+            if active_count >= settings.MAX_TASKS_PER_USER:
+                # Fetch IDs to show the user
+                active_ids = await db_service.redis.smembers(limit_key)
+                ids_str = ", ".join([f"<code>{i}</code>" for i in active_ids])
+                return await message.reply_text(
+                    f"⚠️ <b>Limit Reached!</b>\n"
+                    f"You have <code>{active_count}</code> active tasks: {ids_str}\n\n"
+                    f"Please wait for them to finish or <code>/cancel</code> one to start a new task."
+                )
 
-            # 3. Add to User's Active Set
-            await db_service.redis.sadd(limit_key, task_id)
-            # Auto-expire the set in 2 hours (Safety against zombie tasks)
-            await db_service.redis.expire(limit_key, 7200)
+        # Prepare User Tag (Username or First Name)
+        user_tag = (
+            f"@{message.from_user.username}"
+            if message.from_user.username
+            else message.from_user.first_name
+        )
 
-            # 4. PREPARE THE REPLY TEXT
-            # Generate Channel Link from Settings
-            # Strip -100 for proper Deep Link
-            clean_cid = str(settings.TG_LOG_CHANNEL_ID).replace("-100", "")
-            chan_link = f"https://t.me/c/{clean_cid}/1"
+        # 2. Setup Task Identity
+        task_id = str(uuid.uuid4())[:8]  # Short unique ID
+        status_key = f"task_status:{task_id}"
 
-            # Reply with Buttons
-            response_text = (
-                f"<pre>🚀 Task Queued</pre>\n"
-                f"{'—' * 12}\n"
-                f"🆔 ID: <code>{task_id}</code>\n"
-                f"📦 Content: <code>{tmdb_id}</code> ({type_hint.upper()})\n"
-                f"📡 Status: <code>Added in Queue...</code>\n"
-                f"📜 Channel: <a href='{chan_link}'>Open Log</a>"
-            )
+        # 3. Add to User's Active Set
+        await db_service.redis.sadd(limit_key, task_id)
+        # Auto-expire the set in 2 hours (Safety against zombie tasks)
+        await db_service.redis.expire(limit_key, 7200)
 
-            # 5. Send to DM if in group, else reply in DM
-            try:
-                if message.chat.type != enums.ChatType.PRIVATE:
-                    # Send info to Owner DM
-                    sent_msg = await client.send_message(
-                        chat_id=OWNER_ID,
-                        text=response_text
-                        + f"\n\n📍 <i>Triggered in: {message.chat.title}</i>",
-                        reply_markup=InlineKeyboardMarkup(
+        # PREPARE THE REPLY TEXT
+        # Generate Channel Link from Settings
+        # Strip -100 for proper Deep Link
+        clean_cid = str(settings.TG_LOG_CHANNEL_ID).replace("-100", "")
+        chan_link = f"https://t.me/c/{clean_cid}/1"
+
+        # Reply with Buttons
+        response_text = (
+            f"<pre>🚀 Task Queued</pre>\n"
+            f"{'—' * 12}\n"
+            f"🆔 ID: <code>{task_id}</code>\n"
+            f"📦 Content: <code>{tmdb_id}</code> ({type_hint.upper()})\n"
+            f"📡 Status: <code>Added in Queue...</code>\n"
+            f"📜 Channel: <a href='{chan_link}'>Open Log</a>"
+        )
+
+        # 5. Send to DM if in group, else reply in DM
+        try:
+            if message.chat.type != enums.ChatType.PRIVATE:
+                # Send info to Owner DM
+                sent_msg = await client.send_message(
+                    chat_id=OWNER_ID,
+                    text=response_text
+                    + f"\n\n📍 <i>Triggered in: {message.chat.title}</i>",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
                             [
-                                [
-                                    InlineKeyboardButton(
-                                        "📊 Status", callback_data="check_status"
-                                    )
-                                ]
+                                InlineKeyboardButton(
+                                    "📊 Status", callback_data="check_status"
+                                )
                             ]
-                        ),
-                    )
-                else:
-                    sent_msg = await message.reply_text(response_text, quote=True)
-            except Exception:
-                # Fallback if user hasn't started bot in DM
+                        ]
+                    ),
+                )
+            else:
                 sent_msg = await message.reply_text(response_text, quote=True)
+        except Exception:
+            # Fallback if user hasn't started bot in DM
+            sent_msg = await message.reply_text(response_text, quote=True)
 
-            # 6. CREATE THE REDIS STATUS ENTRY (a "Live Status" in Redis)
-            await db_service.redis.hset(
-                status_key,
-                mapping={
-                    "name": name_hint or f"TMDB {tmdb_id}",
-                    "status": "queued",
-                    "progress": 0,
-                    "tmdb_id": tmdb_id,
-                    "user_tag": user_tag,
-                    "chat_id": str(message.chat.id),
-                    "msg_id": str(sent_msg.id),
-                    "trigger_msg_id": str(trigger_msg_id),
-                },
-            )
-            # Expire status after 1 hour to keep Redis clean
-            await db_service.redis.expire(status_key, 3600)
+        # 6. CREATE THE REDIS STATUS ENTRY (a "Live Status" in Redis)
+        await db_service.redis.hset(
+            status_key,
+            mapping={
+                "name": name_hint or f"TMDB {tmdb_id}",
+                "status": "queued",
+                "progress": 0,
+                "tmdb_id": tmdb_id,
+                "user_tag": user_tag,
+                "chat_id": str(message.chat.id),
+                "msg_id": str(sent_msg.id),
+                "trigger_msg_id": str(trigger_msg_id),
+            },
+        )
+        # Expire status after 1 hour to keep Redis clean
+        await db_service.redis.expire(status_key, 3600)
 
-            # 7. PAYLOAD & PUSH TO QUEUE
-            # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id|user_tag|trigger_msg_id
-            payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}|{user_tag}|{trigger_msg_id}"
+        # 7. PAYLOAD & PUSH TO QUEUE
+        # FORMAT: task_id|tmdb_id|url|type|name|user_id|origin_chat_id|user_tag|trigger_msg_id
+        payload = f"{task_id}|{tmdb_id}|{url}|{type_hint}|{name_hint}|{user_id}|{origin_chat_id}|{user_tag}|{trigger_msg_id}"
 
-            # 5. Push to Queue
-            await db_service.redis.lpush("queue:leech", payload)
-            logger.info(f"Task dispatched: {payload}")
-        else:
-            await message.reply_text("❌ Redis Not Connected")
+        # 5. Push to Queue
+        await db_service.redis.lpush("queue:leech", payload)
+        logger.info(f"Task dispatched: {payload}")
+
+        # 🟢 CRITICAL LOG: If you don't see this in Manager Logs, the bridge failed.
+        logger.info(f"📤 Task Dispatched to Redis: {task_id}")
 
     except Exception as e:
         logger.error(f"Leech Error: {e}")
@@ -320,3 +337,38 @@ async def status_callback_handler(client, callback_query):
     except Exception as e:
         logger.error(f"Callback Error: {e}")
         await callback_query.answer("⚠️ System Busy. Try again.")
+
+
+@Client.on_callback_query(filters.regex("resume_all_tasks"))
+async def resume_all_callback(client, callback_query):
+    await callback_query.answer("♻️ Resuming tasks...")
+    incompletes = await db_service.db.incomplete_tasks.find().to_list(length=100)
+
+    resumed = 0
+    failed_links = []
+
+    for task in incompletes:
+        payload = task["payload"]
+        # Simple Link Validation (Check if it's a direct link that might have expired)
+        task_id = payload.split("|")[0]
+        url = payload.split("|")[2]
+        logger.info(f"Resuming Task {task_id} for URL: {url}")
+
+        # WZML-X Tip: We re-push to Redis.
+        # If the link is expired, the worker will catch it during download.
+        await db_service.redis.lpush("queue:leech", payload)
+        await db_service.db.incomplete_tasks.delete_one({"_id": task["_id"]})
+        resumed += 1
+
+    msg = f"✅ <b>Recovery Complete</b>\nResumed <code>{resumed}</code> tasks."
+    if failed_links:
+        msg += f"\n\n⚠️ <b>Notice:</b> Some links might fail to download if they were temporary/expired."
+
+    await callback_query.message.edit_text(msg)
+
+
+@Client.on_callback_query(filters.regex("clear_incomplete_tasks"))
+async def clear_incomplete_callback(client, callback_query):
+    await db_service.db.incomplete_tasks.drop()
+    await callback_query.answer("🗑️ All records cleared.", show_alert=True)
+    await callback_query.message.delete()

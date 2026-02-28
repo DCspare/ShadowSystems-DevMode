@@ -64,7 +64,10 @@ class YtDlpStatus:
         return self._upload_status or MirrorStatus.STATUS_DOWNLOADING
 
     def name(self):
-        return self._listener.name
+        name = getattr(self._listener, "name", "Unknown")
+        if callable(name):
+            return name()
+        return name
 
     def gid(self):
         return self._listener.task_id

@@ -268,6 +268,14 @@ SHADOW-SYSTEMS (Root)
 - [x] **Hybrid-Identity Node Isolation**: Implemented `WORKER_MODE` protocol. Workers now run in "Stealth-Bot" mode to protect User Identities, while the Manager utilizes "Muscle-User" mode for high-speed metadata ingestion.
 - [x] **Unified Logging Kernel**: Standardized logging format across all Python nodes, allowing for clean, time-stamped centralized debugging.
 
+### 💎 Achievements (v0.8.0-delta) - Industrial Concurrency
+- [x] **Path Isolation Protocol**: Implemented unique task sandboxes (`/app/downloads/{task_id}`) allowing 100% safe parallel processing without filename collisions.
+- [x] **Metadata Orchestrator**: Decoupled API logic into a dedicated `MetadataService`. Integrated Jikan (MAL) `/full` and `/characters` endpoints for deep-dive anime enrichment.
+- [x] **Anime Intelligence**: Added tracking for Voice Actors, Characters, and high-res episode stills. Implemented trailer extraction via Regex for entries missing native YouTube IDs.
+- [x] **Strict Routing Logic**: Developed a "Circuit Breaker" within the episode mapper to prevent Movie IDs (TMDB) from being incorrectly indexed as Series based on filename noise.
+- [x] **Fault-Tolerant Notifications**: Built a "Peer Fallback" system. Bot now routes error logs to the Admin Channel if the user's Peer ID is unreachable, ensuring zero silent failures.
+- [x] **Atomic Persistence**: Fixed MongoDB "Double-Indexing" by utilizing direct `_id` reference passing during the upload-to-index transition.
+
 
 ### Downloading and Uploading Refactored:
 Key Changes:

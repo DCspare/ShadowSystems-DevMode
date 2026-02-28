@@ -86,8 +86,8 @@ class AppSettings(BaseSettings):
     # ==========================================
     ENABLE_USER_LIMITS: bool = False  # set True for public launch
     MAX_TASKS_PER_USER: int = 3
-    MAX_TOTAL_TASKS: int = 10
-    STATUS_UPDATE_INTERVAL: int = 6  # Seconds
+    MAX_TOTAL_TASKS: int = 10         # Global parallel limit
+    STATUS_UPDATE_INTERVAL: int = 6   # Seconds
 
     # --- HANDSHAKE & PERSISTENCE ---
     # Default is True for Cloud IDEs (Dev), set to False in Production for .session files
